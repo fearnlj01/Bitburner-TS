@@ -12,6 +12,9 @@
 
     // Bitburner Extension Settings
     "bitburner.scriptRoot": "./dist/",
+    "bitburner.showFileWatcherEnabledNotification": true,
+    "bitburner.authToken": "QGjNjkJ7eik+960NdwRBtoe5a3FYXe2xUUD79YQRcJtExvtWLyWs8J2JssDasZwV",
+    "bitburner.fileWatcher.enable": true,
 
     // Autosave Settings
     "files.autoSave": "off",
