@@ -12,7 +12,8 @@ export const CONSTANTS = {
         grow      : '/TS/grow.js',
         weaken    : '/TS/weaken.js',
 	},
-	targetHackPercent : 0.025
+	targetHackPercent : 0.1,
+	xpServer : 'joesguns'
 }
 
 export function sleep(ms : number) : Promise<void> {
@@ -124,7 +125,7 @@ export function getHGWTimes(ns : NS, targetHost : string, delayPeriod : number) 
 	return batchDelays
 }
 
-export function runHWGWCycle(ns : NS, host : string, optimalServer : string, delayPeriod : number) : void {
+export function runHWGWCycle(ns : NS, host : string, optimalServer : string, delayPeriod : number) : boolean {
 	const fileList = [CONSTANTS.scripts.hack, CONSTANTS.scripts.grow, CONSTANTS.scripts.weaken]
 	const hostServer = ns.getServer(host)
 
@@ -141,8 +142,23 @@ export function runHWGWCycle(ns : NS, host : string, optimalServer : string, del
             ns.exec(CONSTANTS.scripts.weaken, host, ratios.weaken0, optimalServer, timing.weaken0);
             ns.exec(CONSTANTS.scripts.grow  , host, ratios.grow0  , optimalServer, timing.grow0  );
             ns.exec(CONSTANTS.scripts.weaken, host, ratios.weaken1, optimalServer, timing.weaken1);
-		} catch (e) { /** DO NOTHING*/ }
-	}
+		} catch (e) { /* DO NOTHING */ }
+		return true
+	} else if (availableThreads > 0) {
+		try {
+			const serverInfo = ns.getServer(CONSTANTS.xpServer)
+			if (host != 'home') {
+				if (serverInfo.hackDifficulty > serverInfo.minDifficulty) {
+					ns.exec(CONSTANTS.scripts.weaken, host, availableThreads, CONSTANTS.xpServer, performance.now())
+				} else {
+					ns.exec(CONSTANTS.scripts.grow, host, availableThreads, CONSTANTS.xpServer, performance.now())
+				}
+			}
+		} catch (e) { /* DO NOTHING */ }
+		return true
+	} else {
+		return false
+	} 
 }
 
 export function sendTerminalCommand(command : string) : void {
@@ -251,15 +267,16 @@ export async function primeServer(ns:NS, host : string) : Promise<void> {
 			const maxGrowThreads = Math.ceil(ns.growthAnalyze(host, target.moneyMax / target.moneyAvailable, currServInfo.cpuCores))
 			const maxWeakenThreads = Math.ceil((((maxGrowThreads * CONSTANTS.growSecInc) + (target.hackDifficulty - target.minDifficulty)) / CONSTANTS.weakenSecDec) * (1 - (0.0625 * (currServInfo.cpuCores - 1))))
 				
+			if (getTargetTotalThreads(ns, host).weaken < maxWeakenThreads) {
+				const threadCount = Math.min(threadCountFn(currServInfo,CONSTANTS.scripts.weaken),maxWeakenThreads)
+				if (threadCount) ns.exec(CONSTANTS.scripts.weaken,server,threadCount,host,performance.now())
+			}
+
 			if (getTargetTotalThreads(ns, host).grow < maxGrowThreads) {
 				const threadCount = Math.min(threadCountFn(currServInfo,CONSTANTS.scripts.grow),maxGrowThreads)
 				if (threadCount) ns.exec(CONSTANTS.scripts.grow  ,server,threadCount,host,performance.now())
 			}
 
-			if (getTargetTotalThreads(ns, host).weaken < maxWeakenThreads) {
-				const threadCount = Math.min(threadCountFn(currServInfo,CONSTANTS.scripts.weaken),maxWeakenThreads)
-				if (threadCount) ns.exec(CONSTANTS.scripts.weaken,server,threadCount,host,performance.now())
-			}
 
 			if (target.moneyMax == target.moneyAvailable && target.minDifficulty == target.hackDifficulty) return
 
