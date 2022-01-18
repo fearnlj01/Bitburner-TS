@@ -14,6 +14,9 @@ export async function main(ns : NS) : Promise<void> {
 			if (ram > ns.getServer(purchasedServers[0]).maxRam) {
 				await deletePurchasedServers(ns, purchasedServers)
 				await buyServer(ns, ram, 0)
+			} else {
+				ns.clearLog()
+				ns.print(`INFO\nCurrent max:${ns.getServer(purchasedServers[0]).maxRam}\nNeed: ${ns.nFormat(getMaxRamBuyable(ns)[1] * 25,'$ 0.00a')}`)
 			}
 		}
 
