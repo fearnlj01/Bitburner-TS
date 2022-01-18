@@ -10,7 +10,8 @@ export async function main(ns : NS) : Promise<void> {
 		const cyclesToRePrime = 250
 		let i = 0
 
-		const optimalServer = findOptimalHost(ns)
+		// const optimalServer = findOptimalHost(ns)
+		const optimalServer = 'n00dles'
 		const targetServerInfo = ns.getServer(optimalServer)
 
 		ns.print(`INFO\nTargeting ${optimalServer}\nMin sec: ${targetServerInfo.minDifficulty}\nMax money: ${ns.nFormat(targetServerInfo.moneyMax,'$ 0.00a')}`)
@@ -24,8 +25,11 @@ export async function main(ns : NS) : Promise<void> {
 
 			for (const server of serverList) {
 				await updateRemoteScripts(ns, server)
-				runHWGWCycle(ns, server, optimalServer, delayPeriod)
-				await sleep(delayPeriod)
+				if (runHWGWCycle(ns, server, optimalServer, delayPeriod)) {
+					await sleep(delayPeriod)
+				} else {
+					await sleep(0)
+				}
 			}
 			++i
 		}
