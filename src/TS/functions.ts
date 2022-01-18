@@ -13,7 +13,9 @@ export const CONSTANTS = {
         weaken    : '/TS/weaken.js',
 	},
 	targetHackPercent : 0.1,
-	xpServer : 'joesguns'
+	xpServer : 'joesguns',
+	maxAscRatio : 1.6,
+	minAscRatio : 1.1
 }
 
 export function sleep(ms : number) : Promise<void> {
@@ -292,16 +294,14 @@ export function uuidv4() : string {
 }
 
 export function calcAscMult(member : GangMemberInfo) : number {
-	const maxAscRatio = 1.6
-	const minAscRatio = 1.1
-	
-	const getGradient = (maxMult : number) => ((minAscRatio - maxAscRatio) / (maxMult - 1))
+
+	const getGradient = (maxMult : number) => ((CONSTANTS.minAscRatio - CONSTANTS.maxAscRatio) / (maxMult - 1))
 
 	const gradient = getGradient(30) 
-	const mathConst = (maxAscRatio - gradient)
+	const mathConst = (CONSTANTS.maxAscRatio - gradient)
 	const maxCombat = Math.max(member.str_asc_mult, member.def_asc_mult, member.dex_asc_mult, member.agi_asc_mult)
 
-	return Math.min(Math.max((gradient * maxCombat) + mathConst, minAscRatio), maxAscRatio)
+	return Math.min(Math.max((gradient * maxCombat) + mathConst, CONSTANTS.minAscRatio), CONSTANTS.maxAscRatio)
 }
 
 export function ascendGangMember(ns : NS, member : GangMemberInfo) : boolean {
