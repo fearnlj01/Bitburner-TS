@@ -11,11 +11,12 @@ export const CONSTANTS = {
         hack      : '/TS/hack.js',
         grow      : '/TS/grow.js',
         weaken    : '/TS/weaken.js',
+		share     : '/TS/share.js',
 	},
-	targetHackPercent : 0.1,
+	targetHackPercent : 0.01,
 	xpServer : 'joesguns',
 	maxAscRatio : 1.6,
-	minAscRatio : 1.1
+	minAscRatio : 1.1,
 }
 
 export function sleep(ms : number) : Promise<void> {
@@ -127,9 +128,15 @@ export function getHGWTimes(ns : NS, targetHost : string, delayPeriod : number) 
 	return batchDelays
 }
 
-export function runHWGWCycle(ns : NS, host : string, optimalServer : string, delayPeriod : number) : boolean {
+export async function runHWGWCycle(ns : NS, host : string, optimalServer : string, delayPeriod : number) : Promise<boolean> {
 	const fileList = [CONSTANTS.scripts.hack, CONSTANTS.scripts.grow, CONSTANTS.scripts.weaken]
-	const hostServer = ns.getServer(host)
+	let hostServer : Server
+	try {
+		hostServer = ns.getServer(host)
+	} catch (e) {
+		await sleep(10e3)
+		hostServer = ns.getServer(host)
+	}
 
 	const maxScriptRam = fileList.reduce((acc, curr) => Math.max(acc, ns.getScriptRam(curr, "home")), 0)
 	const availableThreads = Math.floor((hostServer.maxRam - hostServer.ramUsed) / maxScriptRam)
@@ -144,17 +151,20 @@ export function runHWGWCycle(ns : NS, host : string, optimalServer : string, del
             ns.exec(CONSTANTS.scripts.weaken, host, ratios.weaken0, optimalServer, timing.weaken0);
             ns.exec(CONSTANTS.scripts.grow  , host, ratios.grow0  , optimalServer, timing.grow0  );
             ns.exec(CONSTANTS.scripts.weaken, host, ratios.weaken1, optimalServer, timing.weaken1);
+			
 		} catch (e) { /* DO NOTHING */ }
 		return true
 	} else if (availableThreads > 0) {
 		try {
-			const serverInfo = ns.getServer(CONSTANTS.xpServer)
+			// const serverInfo = ns.getServer(CONSTANTS.xpServer)
 			if (host != 'home') {
-				if (serverInfo.hackDifficulty > serverInfo.minDifficulty) {
-					ns.exec(CONSTANTS.scripts.weaken, host, availableThreads, CONSTANTS.xpServer, performance.now())
-				} else {
-					ns.exec(CONSTANTS.scripts.grow, host, availableThreads, CONSTANTS.xpServer, performance.now())
-				}
+				// if (serverInfo.hackDifficulty > serverInfo.minDifficulty) {
+				// 	ns.exec(CONSTANTS.scripts.weaken, host, availableThreads, CONSTANTS.xpServer, performance.now())
+				// } else {
+				// 	ns.exec(CONSTANTS.scripts.grow, host, availableThreads, CONSTANTS.xpServer, performance.now())
+				// }
+				const availableThreads = Math.floor((hostServer.maxRam - hostServer.ramUsed) / ns.getScriptRam(CONSTANTS.scripts.share))
+				if (availableThreads) ns.exec(CONSTANTS.scripts.share, host, availableThreads)
 			}
 		} catch (e) { /* DO NOTHING */ }
 		return true
@@ -169,11 +179,10 @@ export function sendTerminalCommand(command : string) : void {
 	terminalInput.value = command
 
 	const handler = Object.keys(terminalInput)[1]
-	const reactHandler = terminalInput[handler as keyof HTMLInputElement]
 	// @ts-expect-error placeholderDescription
-	reactHandler.onChange({ target: terminalInput })
+	terminalInput[handler as keyof HTMLInputElement].onChange({ target: terminalInput })
 	// @ts-expect-error placeholderDescription
-	reactHandler.onKeyDown({ keyCode: 13, preventDefault: () => null})
+	terminalInput[handler as keyof HTMLInputElement].onKeyDown({ keyCode: 13, preventDefault: () => null})
 }
 
 export async function updateRemoteScripts(ns : NS, host : string) : Promise<boolean> {
