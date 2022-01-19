@@ -6,7 +6,7 @@ export async function main(ns : NS) : Promise<void> {
 	ns.clearLog()
 
 	ns.print('priming')
-	await primeServer(ns,'joesguns')
+	await primeServer(ns,CONSTANTS.xpServer)
 	ns.print('primed')
 
 	while (true) {
