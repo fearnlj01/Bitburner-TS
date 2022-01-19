@@ -4,7 +4,7 @@ import { getVisibleHostsWithPaths, sendTerminalCommand } from '/TS/functions'
 
 export async function main(ns : NS) : Promise<void> {
 	const serverPathList = getVisibleHostsWithPaths(ns)
-	let outputCmd = "home"
+	let outputCmd = "home;"
 
 	for (const servers of serverPathList) {
 		if (servers[0] == ns.args[0]) {
@@ -16,7 +16,7 @@ export async function main(ns : NS) : Promise<void> {
 			outputCmd += ` connect ${server};`
 		}
 	}
-	sendTerminalCommand(`${outputCmd}; backdoor`)
+	sendTerminalCommand(`${outputCmd} backdoor`)
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
