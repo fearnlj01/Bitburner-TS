@@ -1,7 +1,5 @@
-import { GangMemberAscension, GangMemberInfo, NS, Player, Server } from '@ns'
-import { threadRatios, hgwTimes, psInfo, threadCountTarget } from '@types'
-
-//import { functionA, functionB } from 'TS/functions'
+import { GangGenInfo, GangMemberAscension, GangMemberInfo, NS, Player, Server } from '@ns'
+import { threadRatios, hgwTimes, psInfo, threadCountTarget, GangMemberInfoMulti } from '@types'
 
 export const CONSTANTS = {
 	hackSecInc : 0.002,
@@ -13,10 +11,15 @@ export const CONSTANTS = {
         weaken    : '/TS/weaken.js',
 		share     : '/TS/share.js',
 	},
-	targetHackPercent : 0.01,
+	targetHackPercent : 0.25,
 	xpServer : 'joesguns',
-	maxAscRatio : 1.6,
-	minAscRatio : 1.1,
+	gang : {
+		maxAscRatio      : 1.6,
+		minAscRatio      : 1.1,
+		percentMoney     : 0.5,
+		percentRespect   : 0.3,
+		percentTerritory : 0.2,
+	},
 }
 
 export function sleep(ms : number) : Promise<void> {
@@ -85,35 +88,41 @@ export function findOptimalHost(ns : NS) : string {
 	return findNthProfitable(ns, 0)
 }
 
-export function hackThreadsFromMax(player : Player, server : Server, hackPercent : number) : number{
-	const balanceFactor = 240
+export function hackThreadsFromMax(ns : NS, player : Player, server : Server, hackPercent : number) : number{
+	/* const balanceFactor = 240
 
 	const difficultyMult = (100 - server.hackDifficulty) / 100
 	const skillMult = (player.hacking - (server.requiredHackingSkill - 1)) / player.hacking
 	
 	const percentHacked = Math.min(Math.max((difficultyMult * skillMult * player.hacking_money_mult) / balanceFactor, 0), 1)
-	return (server.moneyMax * hackPercent) / Math.floor(server.moneyMax * percentHacked)
+	return (server.moneyMax * hackPercent) / Math.floor(server.moneyMax * percentHacked) */
+	server.moneyAvailable = server.moneyMax
+
+	const threadCount = hackPercent / ns.formulas.hacking.hackPercent(server,player)
+	return threadCount
 }
 
 export function getThreadRatios(ns : NS, host : string, targetHost : string, hackPercent : number) : threadRatios {
 	const hostServer = ns.getServer(host)
 	const targetServer = ns.getServer(targetHost)
+	// const postAtkTgt = targetServer
+	// postAtkTgt.moneyAvailable = postAtkTgt.moneyMax * hackPercent
 	const player = ns.getPlayer()
 
 	const coreBonus = 1 + (hostServer.cpuCores - 1) / 16
 
-	const h0 = Math.floor(hackThreadsFromMax(player, targetServer, hackPercent))
+	const h0 = Math.floor(hackThreadsFromMax(ns, player, targetServer, hackPercent))
     const w0 = Math.min(Math.ceil(((CONSTANTS.hackSecInc * h0) / CONSTANTS.weakenSecDec) / coreBonus), 2000)
     const g0 = Math.ceil(ns.growthAnalyze(targetHost, (1 - hackPercent) ** - 1, hostServer.cpuCores))
+	// const g0 = Math.ceil(Math.log(1/(1-hackPercent)) / Math.log(ns.formulas.hacking.growPercent(targetServer,1,player,hostServer.cpuCores)))
     const w1 = Math.ceil(((CONSTANTS.growSecInc * g0) / CONSTANTS.weakenSecDec) / coreBonus)
-
 	return { 'hack0' : h0, 'weaken0': w0, 'grow0': g0, 'weaken1' : w1 }
 }
 
 export function getHGWTimes(ns : NS, targetHost : string, delayPeriod : number) : hgwTimes {
-	const hackDur   = Math.ceil(ns.getHackTime(targetHost))
-	const growDur   = Math.ceil(hackDur * 3.2)
-	const weakenDur = Math.ceil(hackDur * 4)
+	const hackDur   = ns.formulas.hacking.hackTime(ns.getServer(targetHost),ns.getPlayer())   /* Math.ceil(ns.getHackTime(targetHost)) */
+	const growDur   = ns.formulas.hacking.growTime(ns.getServer(targetHost),ns.getPlayer())   /* Math.ceil(hackDur * 3.2) */
+	const weakenDur = ns.formulas.hacking.weakenTime(ns.getServer(targetHost),ns.getPlayer()) /* Math.ceil(hackDur * 4) */
 
 	const cycleDur = weakenDur + (2 * delayPeriod)
 	const relativeEnd = performance.now() + cycleDur
@@ -156,15 +165,15 @@ export async function runHWGWCycle(ns : NS, host : string, optimalServer : strin
 		return true
 	} else if (availableThreads > 0) {
 		try {
-			// const serverInfo = ns.getServer(CONSTANTS.xpServer)
+			const serverInfo = ns.getServer(CONSTANTS.xpServer)
 			if (host != 'home') {
-				// if (serverInfo.hackDifficulty > serverInfo.minDifficulty) {
-				// 	ns.exec(CONSTANTS.scripts.weaken, host, availableThreads, CONSTANTS.xpServer, performance.now())
-				// } else {
-				// 	ns.exec(CONSTANTS.scripts.grow, host, availableThreads, CONSTANTS.xpServer, performance.now())
-				// }
-				const availableThreads = Math.floor((hostServer.maxRam - hostServer.ramUsed) / ns.getScriptRam(CONSTANTS.scripts.share))
-				if (availableThreads) ns.exec(CONSTANTS.scripts.share, host, availableThreads)
+				if (serverInfo.hackDifficulty > serverInfo.minDifficulty) {
+					ns.exec(CONSTANTS.scripts.weaken, host, availableThreads, CONSTANTS.xpServer, performance.now())
+				} else {
+					ns.exec(CONSTANTS.scripts.grow, host, availableThreads, CONSTANTS.xpServer, performance.now())
+				}
+				// const availableThreads = Math.floor((hostServer.maxRam - hostServer.ramUsed) / ns.getScriptRam(CONSTANTS.scripts.share))
+				// if (availableThreads) ns.exec(CONSTANTS.scripts.share, host, availableThreads)
 			}
 		} catch (e) { /* DO NOTHING */ }
 		return true
@@ -192,7 +201,7 @@ export async function updateRemoteScripts(ns : NS, host : string) : Promise<bool
 export async function deletePurchasedServers(ns : NS, purchasedServers : string[]) : Promise<void> {
 	for (const server of purchasedServers) {
 		ns.killall(server)
-		await sleep(200)
+		// await sleep(1e3)
 		ns.deleteServer(server)
 	}
 }
@@ -300,17 +309,18 @@ export async function primeServer(ns:NS, host : string) : Promise<void> {
 export function uuidv4() : string {
 	// @ts-expect-error placeholderDescription
 	return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c => (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16))
+	// return randomUUID()
 }
 
 export function calcAscMult(member : GangMemberInfo) : number {
 
-	const getGradient = (maxMult : number) => ((CONSTANTS.minAscRatio - CONSTANTS.maxAscRatio) / (maxMult - 1))
+	const getGradient = (maxMult : number) => ((CONSTANTS.gang.minAscRatio - CONSTANTS.gang.maxAscRatio) / (maxMult - 1))
 
 	const gradient = getGradient(30) 
-	const mathConst = (CONSTANTS.maxAscRatio - gradient)
+	const mathConst = (CONSTANTS.gang.maxAscRatio - gradient)
 	const maxCombat = Math.max(member.str_asc_mult, member.def_asc_mult, member.dex_asc_mult, member.agi_asc_mult)
 
-	return Math.min(Math.max((gradient * maxCombat) + mathConst, CONSTANTS.minAscRatio), CONSTANTS.maxAscRatio)
+	return Math.min(Math.max((gradient * maxCombat) + mathConst, CONSTANTS.gang.minAscRatio), CONSTANTS.gang.maxAscRatio)
 }
 
 export function ascendGangMember(ns : NS, member : GangMemberInfo) : boolean {
@@ -325,7 +335,228 @@ export function ascendGangMember(ns : NS, member : GangMemberInfo) : boolean {
 	}
 }
 
+export function ascendAvailableGangMembers(ns : NS, membersInfo : GangMemberInfo[]) : void {
+	for (const memberInfo of membersInfo) {
+		ascendGangMember(ns, memberInfo)
+	}
+}
+
 export function getEquipmentAvailable(ns : NS, member : GangMemberInfo) : string[] {
 	const equipment = ns.gang.getEquipmentNames().filter((equipment) => ns.gang.getEquipmentType(equipment) != 'Rootkit')
 	return equipment.filter((item) => !(member.upgrades.includes(item)))
+}
+
+export function buyAvailableEquipment(ns : NS, membersInfo : GangMemberInfo[]) : void {
+	for (const memberInfo of membersInfo) {
+		for (const item of getEquipmentAvailable(ns, memberInfo)) {
+			ns.gang.purchaseEquipment(memberInfo.name, item)
+		}
+	}
+}
+
+export function checkSetWarfare(ns : NS) : void {
+	const gangInfo = ns.gang.getGangInformation()
+
+	if (gangGetTerritory(ns) < 1 && !gangInfo.territoryWarfareEngaged) {
+		const minWarfareChance = Object.keys(ns.gang.getOtherGangInformation()).filter((gangName) => (gangName != gangInfo.faction))
+			.reduce((prev, gangName) => Math.min(prev,ns.gang.getChanceToWinClash(gangName)),1)
+		if (minWarfareChance > 0.9) ns.gang.setTerritoryWarfare(true)
+	} else {
+		ns.gang.setTerritoryWarfare(false)
+	}
+}
+
+export async function ascend(ns : NS) : Promise<void> {
+	const fileList =["brutessh.exe", "sqlinject.exe", "ftpcrack.exe", "relaysmtp.exe", "httpworm.exe"]
+	await sleep(2e3)
+	ns.purchaseTor()
+	fileList.filter(program => !ns.fileExists(program, "home")).forEach(program => ns.purchaseProgram(program))
+	// sendTerminalCommand("gangstart")
+	sendTerminalCommand("run /TS/hwgw.js --tail ; run /TS/purchaseServers.js --tail ; run /TS/gang2.js --tail")
+}
+
+export function setGangTasks(ns : NS, memberInfo : GangMemberInfo[], gangInfo : GangGenInfo) : void {
+	// const memberArray = memberInfo.map(member => {
+	// 	const mem : GangMemberInfoMulti = member
+	// 	mem.maxMult = Math.max(mem.str_asc_mult, mem.def_asc_mult, mem.dex_asc_mult, mem.agi_asc_mult)
+	// 	mem.maxCombat = Math.max(mem.str, mem.def, mem.dex, mem.agi)
+	// 	return mem as GangMemberInfoMulti
+	// }).sort(() => Math.random() - 0.5)
+	// const maxMaxMult = Math.max(...memberArray.map(member => member.maxMult as number))
+	// switch (true) {
+	// 	case (ns.getFactionRep(gangInfo.faction) >= 2.5e6) : {
+	// 		memberArray.forEach((member, index) => {
+	// 			if ((member.maxCombat as number / member.maxMult! as number) < 400) {
+	// 				if (member.task != 'Terrorism') ns.gang.setMemberTask(member.name, 'Terrorism')
+	// 			} else {
+	// 				if (!gangInfo.territoryWarfareEngaged && gangInfo.territory != 1) {
+	// 					if (member.task != 'Territory Warfare') ns.gang.setMemberTask(member.name, 'Territory Warfare')
+	// 				} else {
+	// 					if (index < (memberArray.length * (11 / 12))) {
+	// 						if (member.task != 'Human Trafficking') ns.gang.setMemberTask(member.name, 'Human Trafficking')
+	// 					} else {
+	// 						if (member.task != 'Terrorism') ns.gang.setMemberTask(member.name, 'Terrorism')
+	// 					}
+	// 				}
+	// 			}
+	// 		})
+	// 		console.log("gang_gte2.5m")
+	// 		break
+	// 	}
+	// 	/**  case (maxMaxMult >= 6 && maxMaxMult < 20) : {
+	// 	 *	memberArray.forEach((member, index) => {
+	// 	 *		if ((member.maxCombat as number / member.maxMult! as number) < 200) {
+	// 	 *			if (member.task != 'Train Combat') ns.gang.setMemberTask(member.name, 'Train Combat')
+	// 	 *		} else {
+	// 	 *			if (index < (memberArray.length * 0.5)) {
+	// 	 *				if (member.task != 'Terrorism') ns.gang.setMemberTask(member.name, 'Terrorism')
+	// 	 *			} else {
+	// 	 *				if (index < (memberArray.length * 0.33)) {
+	// 	 *					if (member.task != 'Terrorism') ns.gang.setMemberTask(member.name, 'Terrorism')
+	// 	 *				} else if (index < (memberArray.length * 0.66)) {
+	// 	 *					if (member.task != 'Territory Warfare') ns.gang.setMemberTask(member.name, 'Territory Warfare')
+	// 	 *				} else {
+	// 	 *					if (member.task != 'Mug People') ns.gang.setMemberTask(member.name, 'Mug People')
+	// 	 *				}
+	// 	 *			}
+	// 	 *		}
+	// 	 *	})
+	// 	 *	console.log("gang_gte6_lt20")
+	// 	 *	break
+	// 	 * }
+	// 	 * case (maxMaxMult >= 20 && maxMaxMult < 30) : { */
+	// 	case (maxMaxMult >= 6 && maxMaxMult < 30) : {
+	// 		memberArray.forEach((member, index) => {
+	// 			if (gangInfo.respect < (5**9)) {
+	// 				if ((member.maxCombat as number / member.maxMult! as number) < 400) {
+	// 					if (member.task != 'Train Combat') ns.gang.setMemberTask(member.name, 'Train Combat')
+	// 				}
+	// 				if (member.task != 'Terrorism') ns.gang.setMemberTask(member.name, 'Terrorism')
+	// 			} else {
+	// 				if ((member.maxCombat as number / member.maxMult! as number) < 400) {
+	// 					if (member.task != 'Train Combat') ns.gang.setMemberTask(member.name, 'Train Combat')
+	// 				} else {
+	// 					if (index < (memberArray.length * 0.33)) {
+	// 						if (member.task != 'Terrorism') ns.gang.setMemberTask(member.name, 'Terrorism')
+	// 					} else if (index < (memberArray.length * 0.66)) {
+	// 						if (member.task != 'Territory Warfare') ns.gang.setMemberTask(member.name, 'Territory Warfare')
+	// 					} else {
+	// 						if ((member.str + member.def + member.dex + member.agi) > 750) {
+	// 							if (member.task != 'Human Trafficking') ns.gang.setMemberTask(member.name, 'Human Trafficking')
+	// 						} else {
+	// 							if (member.task != 'Mug People') ns.gang.setMemberTask(member.name, 'Mug People')
+	// 						}
+	// 					}
+	// 				}
+	// 			}
+	// 		})
+	// 		console.log("gang_gte6_lt30")
+	// 		break
+	// 	}
+	// 	case (maxMaxMult >= 30) : {
+	// 		memberArray.forEach((member, index) => {
+	// 			if ((member.maxCombat as number / member.maxMult! as number) < 400) {
+	// 				if (member.task != 'Train Combat') ns.gang.setMemberTask(member.name, 'Train Combat')
+	// 			} else {
+	// 				if (index < (memberArray.length * 0.33)) {
+	// 					if (member.task != 'Terrorism') ns.gang.setMemberTask(member.name, 'Terrorism')
+	// 				} else {
+	// 					if (index < (memberArray.length * 0.66)) {
+	// 						if (member.task != 'Territory Warfare') ns.gang.setMemberTask(member.name, 'Territory Warfare')
+	// 					} else {
+	// 						if (member.task != 'Human Trafficking') ns.gang.setMemberTask(member.name, 'Human Trafficking')
+	// 					}
+	// 				}
+	// 			}
+	// 		})
+	// 		console.log("gang_gte30")
+	// 		break
+	// 	}
+	// 	default : {
+	// 		memberArray.filter(member => member.task != 'Train Combat')
+	// 				.forEach(member => ns.gang.setMemberTask(member.name,'Train Combat'));
+	// 				console.log("gang_default")
+	// 		break
+	// 	}
+	// }
+}
+
+export function setGangTasks2(ns : NS, memberInfo: GangMemberInfo[]) : void {
+	const memberArray = memberInfo.map(member => {
+		// const memb : GangMemberInfoMulti = member
+		return Object.assign({},member,{
+			maxMult     : Math.max(member.str_asc_mult, member.def_asc_mult, member.dex_asc_mult, member.agi_asc_mult),
+			maxCombat   : Math.max(member.str, member.def, member.dex, member.agi),
+			totalCombat : member.str + member.def + member.dex + member.agi,
+			baseStr     : member.str / (member.str_asc_mult * member.str_mult),
+			baseDef     : member.def / (member.def_asc_mult * member.def_mult),
+			baseDex     : member.dex / (member.dex_asc_mult * member.dex_mult),
+			baseAgi     : member.agi / (member.agi_asc_mult * member.agi_mult),
+			baseCombat  : member.str / (member.str_asc_mult * member.str_mult) +
+						member.def / (member.def_asc_mult * member.def_mult) +
+						member.dex / (member.dex_asc_mult * member.dex_mult) +
+						member.agi / (member.agi_asc_mult * member.agi_mult)
+		}) as GangMemberInfoMulti
+		// memb.maxMult = Math.max(memb.str_asc_mult, memb.def_asc_mult, memb.dex_asc_mult, memb.agi_asc_mult)
+		// memb.maxCombat = Math.max(memb.str, memb.def, memb.dex, memb.agi)
+		// memb.totalCombat = memb.str + memb.def + memb.dex + memb.agi
+		// memb.baseStr = (memb.str / (memb.str_asc_mult * memb.str_mult)) ?? 1
+		// memb.baseDef = (memb.def / (memb.def_asc_mult * memb.def_mult)) ?? 1
+		// memb.baseDex = (memb.dex / (memb.dex_asc_mult * memb.dex_mult)) ?? 1
+		// memb.baseAgi = (memb.agi / (memb.agi_asc_mult * memb.agi_mult)) ?? 1
+		// memb.baseCombat = memb.baseStr + memb.baseDef + memb.baseDex + memb.baseAgi
+	})
+
+	const memberArrayTaskReady = memberArray.filter(member => member.baseCombat >= 150)
+	const memberArrayTraining  = memberArray.filter(member => member.baseCombat <  150)
+
+	memberArrayTraining.forEach(member => ns.gang.setMemberTask(member.name, 'Train Combat'))
+	contextualSetMemberTask(ns, memberArrayTaskReady)
+}
+
+export function contextualSetMemberTask(ns : NS, memberInfo : GangMemberInfoMulti[]) : void {
+	memberInfo.sort(() => Math.random() - 0.5).forEach((member, index) => {
+		if ((index + 1) <= CONSTANTS.gang.percentMoney * memberInfo.length) {
+			ns.gang.setMemberTask(member.name,gangMoneyTask(member))
+		} else if ((index + 1) <= (CONSTANTS.gang.percentMoney + CONSTANTS.gang.percentRespect) * memberInfo.length) {
+			ns.gang.setMemberTask(member.name,gangRespectTask(ns, member))
+		} else {
+			ns.gang.setMemberTask(member.name,gangTerritoryTask(ns, member))
+		}
+	})
+}
+
+export function gangMoneyTask(memberInfo : GangMemberInfoMulti) : string {
+	if (Math.random() < 0.2) {
+		return 'Train Combat'
+	} else if (memberInfo.totalCombat > 750) {
+		return 'Human Trafficking'
+	} else {
+		return 'Mug People'
+	}
+}
+
+export function gangRespectTask(ns : NS, memberInfo : GangMemberInfoMulti) : string {
+	if ((ns.getFactionRep(ns.gang.getGangInformation().faction) > 2.5e6) || (memberInfo.totalCombat < 1000)) {
+		return gangTerritoryTask(ns, memberInfo)
+	} else {
+		return 'Terrorism'
+	}
+}
+
+export function gangTerritoryTask(ns : NS, memberInfo : GangMemberInfoMulti) : string {
+	const gangInfo      = ns.gang.getGangInformation()
+	if (gangGetTerritory(ns) < 1 && !gangInfo.territoryWarfareEngaged) {
+		return 'Territory Warfare'
+	} else {
+		return gangMoneyTask(memberInfo)
+	}
+}
+
+export function gangGetTerritory(ns : NS) : number {
+	const gangInfo      = ns.gang.getGangInformation()
+	const otherGangs    = Object.keys(ns.gang.getOtherGangInformation()).filter(gang => gang != gangInfo.faction)
+	// @ts-expect-error curr is indexable string
+	const territory  = 1 - otherGangs.reduce((prev,curr) => ns.gang.getOtherGangInformation()[curr]['territory'] + prev, 0)
+	return territory
 }

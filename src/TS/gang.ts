@@ -1,5 +1,5 @@
 import { NS } from '@ns'
-import { ascendGangMember, getEquipmentAvailable, sleep, uuidv4 } from '/TS/functions'
+import { ascendGangMember, checkSetWarfare, getEquipmentAvailable, sleep, uuidv4 } from '/TS/functions'
 
 export async function main(ns : NS) : Promise<void> {
 	const noLogFuncs = ['gang.canRecruitMember','gang.getMemberNames','gang.purchaseEquipment']
@@ -14,11 +14,20 @@ export async function main(ns : NS) : Promise<void> {
 		for (const member of gangMembers) {
 			const gangInfo = ns.gang.getGangInformation()
 			const currMember = ns.gang.getMemberInformation(member)
-			const currCombatMax = Math.max(currMember.str / currMember.str_asc_mult, currMember.def / currMember.def_asc_mult, currMember.dex / currMember.dex_asc_mult, currMember.agi / currMember.agi_asc_mult)
+			// const currCombatMax = Math.max(currMember.str / currMember.str_asc_mult, currMember.def / currMember.def_asc_mult, currMember.dex / currMember.dex_asc_mult, currMember.agi / currMember.agi_asc_mult)
 			const combatMax = Math.max(currMember.str, currMember.def, currMember.dex, currMember.agi)
+			const multMax = Math.max(currMember.str_mult, currMember.def_mult, currMember.dex_mult, currMember.agi_mult)
 
-			if (currCombatMax < 200) {
-				(currMember.task == 'Train Combat') || ns.gang.setMemberTask(currMember.name, 'Train Combat')
+			if (multMax < 30) {
+				if (gangInfo.moneyGainRate == 0) {
+					if (combatMax > 1000) {
+						(currMember.task == 'Human Trafficking') || ns.gang.setMemberTask(currMember.name, 'Human Trafficking')
+					} else {
+						(currMember.task == 'Mug People') || ns.gang.setMemberTask(currMember.name, 'Mug People')
+					}
+				} else {
+					(currMember.task == 'Train Combat') || ns.gang.setMemberTask(currMember.name, 'Train Combat')
+				}
 			} else if (gangInfo.moneyGainRate < 1000) {
 				if (combatMax > 250) {
 					(currMember.task == 'Human Trafficking') || ns.gang.setMemberTask(currMember.name, 'Human Trafficking')
@@ -35,5 +44,6 @@ export async function main(ns : NS) : Promise<void> {
 
 			await sleep(2000)
 		}
+		checkSetWarfare(ns)
 	}
 }

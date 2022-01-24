@@ -1,3 +1,5 @@
+import { GangMemberInfo, NS } from "/../NetscriptDefinitions";
+
 export interface threadRatios {
 	hack0   : number,
 	weaken0 : number,
@@ -31,4 +33,21 @@ export interface ServerData {
 	txts    : string[],
 	scripts : string[],
 	flags   : string[],
+}
+
+export interface GangMemberInfoMulti extends GangMemberInfo {
+	maxMult: number;
+	maxCombat: number;
+	totalCombat: number;
+	baseStr: number;
+	baseDef: number;
+	baseDex: number;
+	baseAgi: number;
+	baseCombat: number;
+}
+
+export interface NS2 extends NS {
+	heart: {
+		break() : number
+	}
 }

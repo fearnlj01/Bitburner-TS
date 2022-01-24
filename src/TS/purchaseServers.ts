@@ -11,7 +11,8 @@ export async function main(ns : NS) : Promise<void> {
 		if (purchasedServers.length == 0) {
 			await buyServer(ns, ram, 200)
 		} else {
-			if (ram > ns.getServer(purchasedServers[0]).maxRam) {
+			const maxRam = Math.max(...purchasedServers.map(server => ns.getServer(server).maxRam))
+			if (ram > maxRam) {
 				await deletePurchasedServers(ns, purchasedServers)
 				await buyServer(ns, ram, 0)
 			} else {
