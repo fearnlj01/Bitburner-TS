@@ -11,7 +11,7 @@ export const CONSTANTS = {
         weaken    : '/TS/weaken.js',
 		share     : '/TS/share.js',
 	},
-	targetHackPercent : 0.25,
+	targetHackPercent : 0.01,
 	xpServer : 'joesguns',
 	gang : {
 		maxAscRatio      : 1.6,
@@ -231,10 +231,10 @@ export async function runHWGWCycle(ns : NS, host : string, optimalServer : strin
 
 	if (availableThreads >= maxThreadsReq) {
 		try {
-			ns.exec(CONSTANTS.scripts.hack  , host, ratios.hack0  , optimalServer, timing.hack0  );
-            ns.exec(CONSTANTS.scripts.weaken, host, ratios.weaken0, optimalServer, timing.weaken0);
-            ns.exec(CONSTANTS.scripts.grow  , host, ratios.grow0  , optimalServer, timing.grow0  );
-            ns.exec(CONSTANTS.scripts.weaken, host, ratios.weaken1, optimalServer, timing.weaken1);
+			ns.exec(CONSTANTS.scripts.hack  , host, ratios.hack0  , optimalServer, timing.hack0)
+            ns.exec(CONSTANTS.scripts.weaken, host, ratios.weaken0, optimalServer, timing.weaken0)
+            ns.exec(CONSTANTS.scripts.grow  , host, ratios.grow0  , optimalServer, timing.grow0)
+            ns.exec(CONSTANTS.scripts.weaken, host, ratios.weaken1, optimalServer, timing.weaken1)
 			
 		} catch (e) { /* DO NOTHING */ }
 		return true
@@ -531,7 +531,7 @@ export async function ascend(ns : NS) : Promise<void> {
 	await sleep(2e3)
 	ns.purchaseTor()
 	fileList.filter(program => !ns.fileExists(program, "home")).forEach(program => ns.purchaseProgram(program))
-	sendTerminalCommand("run /TS/xp.js ; run /TS/purchaseServers.js ; run /TS/gang2.js --tail")
+	sendTerminalCommand("run /TS/hwgw.js ; run /TS/purchaseServers.js ; run /TS/gang2.js --tail")
 }
 
 /**
@@ -556,8 +556,8 @@ export function setGangTasks2(ns : NS, memberInfo: GangMemberInfo[]) : void {
 		}) as GangMemberInfoMulti
 	})
 
-	const memberArrayTaskReady = memberArray.filter(member => member.baseCombat >= 150)
-	const memberArrayTraining  = memberArray.filter(member => member.baseCombat <  150)
+	const memberArrayTaskReady = memberArray.filter(member => member.baseCombat >= (150 * 4))
+	const memberArrayTraining  = memberArray.filter(member => member.baseCombat <  (150 * 4))
 
 	memberArrayTraining.forEach(member => ns.gang.setMemberTask(member.name, 'Train Combat'))
 	contextualSetMemberTask(ns, memberArrayTaskReady)
