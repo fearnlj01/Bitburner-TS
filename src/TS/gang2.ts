@@ -5,6 +5,7 @@ export async function main(ns : NS) : Promise<void> {
 	// const noLogFuncs = ['gang.canRecruitMember','gang.getMemberNames','gang.purchaseEquipment']
 	// noLogFuncs.forEach((command) => ns.disableLog(command))
 	ns.disableLog('ALL')
+	ns.tail()
 	
 	while (true) {
 		checkSetWarfare(ns) //Sets warfare to enabled if likely to win
