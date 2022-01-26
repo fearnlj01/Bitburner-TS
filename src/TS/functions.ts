@@ -10,15 +10,16 @@ export const CONSTANTS = {
         grow      : '/TS/grow.js',
         weaken    : '/TS/weaken.js',
 		share     : '/TS/share.js',
+		maxGrow   : '/TS/maxGrow.js',
 	},
 	targetHackPercent : 0.01,
 	xpServer : 'joesguns',
 	gang : {
-		maxAscRatio      : 1.6,
-		minAscRatio      : 1.1,
-		percentMoney     : 0.5,
-		percentRespect   : 0.3,
-		percentTerritory : 0.2,
+		maxAscRatio      : 1.60,
+		minAscRatio      : 1.04,
+		percentMoney     : 0.50,
+		percentRespect   : 0.30,
+		get percentTerritory() : number { return 1.0 - this.percentMoney - this.percentRespect }
 	},
 }
 
@@ -228,12 +229,12 @@ export async function runHWGWCycle(ns : NS, host : string, optimalServer : strin
 	const timing = getHGWTimes(ns, optimalServer, delayPeriod)
 	const ratios = getThreadRatios(ns, host, optimalServer, CONSTANTS.targetHackPercent)
 	const maxThreadsReq = Object.values(ratios).reduce((a, b) => a + b)
-
+	
 	if (availableThreads >= maxThreadsReq) {
 		try {
-			ns.exec(CONSTANTS.scripts.hack  , host, ratios.hack0  , optimalServer, timing.hack0)
+			ns.exec(CONSTANTS.scripts.hack, host, ratios.hack0, optimalServer, timing.hack0)
             ns.exec(CONSTANTS.scripts.weaken, host, ratios.weaken0, optimalServer, timing.weaken0)
-            ns.exec(CONSTANTS.scripts.grow  , host, ratios.grow0  , optimalServer, timing.grow0)
+            ns.exec(CONSTANTS.scripts.grow, host, ratios.grow0, optimalServer, timing.grow0)
             ns.exec(CONSTANTS.scripts.weaken, host, ratios.weaken1, optimalServer, timing.weaken1)
 			
 		} catch (e) { /* DO NOTHING */ }
@@ -531,7 +532,7 @@ export async function ascend(ns : NS) : Promise<void> {
 	await sleep(2e3)
 	ns.purchaseTor()
 	fileList.filter(program => !ns.fileExists(program, "home")).forEach(program => ns.purchaseProgram(program))
-	sendTerminalCommand("run /TS/hwgw.js ; run /TS/purchaseServers.js ; run /TS/gang.js --tail")
+	sendTerminalCommand("run /TS/xp.js ; run /TS/purchaseServers.js ; run /TS/gang.js")
 }
 
 /**
