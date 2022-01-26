@@ -556,8 +556,8 @@ export function setGangTasks2(ns : NS, memberInfo: GangMemberInfo[]) : void {
 		}) as GangMemberInfoMulti
 	})
 
-	const memberArrayTaskReady = memberArray.filter(member => member.baseCombat >= (150 * 4))
-	const memberArrayTraining  = memberArray.filter(member => member.baseCombat <  (150 * 4))
+	const memberArrayTraining  = memberArray.filter(member => member.baseCombat <= (150 * 4) || member.maxMult <= 6)
+	const memberArrayTaskReady = memberArray.filter(member => !memberArrayTraining.includes(member))
 
 	memberArrayTraining.forEach(member => ns.gang.setMemberTask(member.name, 'Train Combat'))
 	contextualSetMemberTask(ns, memberArrayTaskReady)
