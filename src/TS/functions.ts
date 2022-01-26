@@ -531,7 +531,7 @@ export async function ascend(ns : NS) : Promise<void> {
 	await sleep(2e3)
 	ns.purchaseTor()
 	fileList.filter(program => !ns.fileExists(program, "home")).forEach(program => ns.purchaseProgram(program))
-	sendTerminalCommand("run /TS/hwgw.js ; run /TS/purchaseServers.js ; run /TS/gang2.js --tail")
+	sendTerminalCommand("run /TS/hwgw.js ; run /TS/purchaseServers.js ; run /TS/gang.js --tail")
 }
 
 /**
