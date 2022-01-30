@@ -35,7 +35,7 @@ export interface ServerData {
 	flags   : string[],
 }
 
-export interface GangMemberInfoMulti extends GangMemberInfo {
+export interface GangMember extends GangMemberInfo {
 	maxMult: number;
 	maxCombat: number;
 	totalCombat: number;
@@ -46,8 +46,9 @@ export interface GangMemberInfoMulti extends GangMemberInfo {
 	baseCombat: number;
 }
 
-export interface NS2 extends NS {
-	heart: {
-		break() : number
-	}
+export interface NS2 extends NS { heart: { break() : number} }
+
+export interface relativeFileList {
+	host: string;
+	file: string;
 }
