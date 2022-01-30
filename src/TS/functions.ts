@@ -1,5 +1,5 @@
-import { GangMemberAscension, GangMemberInfo, NS, Player, Server } from '@ns'
-import { threadRatios, hgwTimes, psInfo, threadCountTarget, GangMemberInfoMulti } from '@types'
+import { GangMemberAscension, GangMemberInfo, GangOtherInfo, NS, Player, Server } from '@ns'
+import { threadRatios, hgwTimes, psInfo, threadCountTarget, GangMember, relativeFileList } from '@types'
 
 export const CONSTANTS = {
 	hackSecInc : 0.002,
@@ -12,7 +12,7 @@ export const CONSTANTS = {
 		share     : '/TS/share.js',
 		maxGrow   : '/TS/maxGrow.js',
 	},
-	targetHackPercent : 0.01,
+	targetHackPercent : 0.0001,
 	xpServer : 'joesguns',
 	gang : {
 		maxAscRatio      : 1.60,
@@ -77,11 +77,23 @@ export function getVisibleHosts(ns : NS) : string[] {
  * @returns A list of servers with root access
  */
 export function getRoot(ns : NS, hosts : string[]) : string[] {
-	for (const host of hosts) {
-		for (const program of [ns.brutessh, ns.sqlinject, ns.ftpcrack, ns.relaysmtp, ns.httpworm, ns.nuke]) {
-			try { program(host) } catch (e) { /** Do nothing */ }
-		}
-	}
+	type executeable = (host: string) => void
+	const programs : [string, executeable][] = [
+		["brutessh.exe",  ns.brutessh ],
+		["sqlinject.exe", ns.sqlinject],
+		["ftpcrack.exe",  ns.ftpcrack ],
+		["relaysmtp.exe", ns.relaysmtp],
+		["httpworm.exe",  ns.httpworm ],
+	]
+	// eslint-disable-next-line @typescript-eslint/no-unused-vars
+	const availablePrograms = programs.filter(([file, exe]) => ns.fileExists(file as string))
+
+	hosts.filter(host => ns.getServer(host).numOpenPortsRequired <= availablePrograms.length).forEach(host => {
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
+		availablePrograms.forEach(([file, exe]) => exe(host))
+		ns.nuke(host)
+	})
+
 	return hosts.filter((host) => !ns.getServer(host).hasAdminRights)
 }
 
@@ -172,8 +184,8 @@ export function getThreadRatios(ns : NS, host : string, targetHost : string, hac
 
 	const coreBonus = 1 + (hostServer.cpuCores - 1) / 16
 
-	const h0 = Math.floor(hackThreadsFromMax(ns, player, targetServer, hackPercent))
-    const w0 = Math.min(Math.ceil(((CONSTANTS.hackSecInc * h0) / CONSTANTS.weakenSecDec) / coreBonus), 2000)
+	const h0 = Math.max(1,Math.floor(hackThreadsFromMax(ns, player, targetServer, hackPercent)))
+    const w0 = Math.min(Math.max(1,Math.ceil(((CONSTANTS.hackSecInc * h0) / CONSTANTS.weakenSecDec) / coreBonus), 2000))
     const g0 = Math.ceil(ns.growthAnalyze(targetHost, (1 - hackPercent) ** - 1, hostServer.cpuCores))
 	// const g0 = Math.ceil(Math.log(1/(1-hackPercent)) / Math.log(ns.formulas.hacking.growPercent(targetServer,1,player,hostServer.cpuCores)))
     const w1 = Math.ceil(((CONSTANTS.growSecInc * g0) / CONSTANTS.weakenSecDec) / coreBonus)
@@ -193,13 +205,12 @@ export function getHGWTimes(ns : NS, targetHost : string, delayPeriod : number) 
 	const weakenDur = ns.formulas.hacking.weakenTime(ns.getServer(targetHost),ns.getPlayer()) /* Math.ceil(hackDur * 4) */
 
 	const cycleDur = weakenDur + (2 * delayPeriod)
-	const relativeEnd = performance.now() + cycleDur
 
 	const batchDelays = {
-		hack0   : relativeEnd - hackDur   - 3 * delayPeriod,
-		weaken0 : relativeEnd - weakenDur - 2 * delayPeriod,
-		grow0   : relativeEnd - growDur   - 1 * delayPeriod,
-		weaken1 : relativeEnd - weakenDur - 0 * delayPeriod
+		hack0   : cycleDur - hackDur   - 3 * delayPeriod,
+		weaken0 : cycleDur - weakenDur - 2 * delayPeriod,
+		grow0   : cycleDur - growDur   - 1 * delayPeriod,
+		weaken1 : cycleDur - weakenDur - 0 * delayPeriod
 	}
 
 	return batchDelays
@@ -229,14 +240,12 @@ export async function runHWGWCycle(ns : NS, host : string, optimalServer : strin
 	const timing = getHGWTimes(ns, optimalServer, delayPeriod)
 	const ratios = getThreadRatios(ns, host, optimalServer, CONSTANTS.targetHackPercent)
 	const maxThreadsReq = Object.values(ratios).reduce((a, b) => a + b)
-	
 	if (availableThreads >= maxThreadsReq) {
 		try {
-			ns.exec(CONSTANTS.scripts.hack, host, ratios.hack0, optimalServer, timing.hack0)
-            ns.exec(CONSTANTS.scripts.weaken, host, ratios.weaken0, optimalServer, timing.weaken0)
-            ns.exec(CONSTANTS.scripts.grow, host, ratios.grow0, optimalServer, timing.grow0)
-            ns.exec(CONSTANTS.scripts.weaken, host, ratios.weaken1, optimalServer, timing.weaken1)
-			
+			ns.exec(CONSTANTS.scripts.hack, host, ratios.hack0, optimalServer, timing.hack0 + performance.now())
+            ns.exec(CONSTANTS.scripts.weaken, host, ratios.weaken0, optimalServer, timing.weaken0 + performance.now())
+            ns.exec(CONSTANTS.scripts.grow, host, ratios.grow0, optimalServer, timing.grow0 + performance.now())
+            ns.exec(CONSTANTS.scripts.weaken, host, ratios.weaken1, optimalServer, timing.weaken1 + performance.now())
 		} catch (e) { /* DO NOTHING */ }
 		return true
 	} else if (availableThreads > 0) {
@@ -304,8 +313,10 @@ export async function deletePurchasedServers(ns : NS, purchasedServers : string[
  */
 export function getServerCostArray(ns : NS) : number[][] {
 	const serverCosts = []
-	for (let i = 3; i <= Math.log2(ns.getPurchasedServerMaxRam()); ++i) {
-		serverCosts.push([(2 ** i), ns.getPurchasedServerCost(2 ** i) * ns.getPurchasedServerLimit()])
+	for (let i = 4; i <= Math.log2(ns.getPurchasedServerMaxRam()); ++i) {
+		if (!(i % 2) || (i == Math.log2(ns.getPurchasedServerMaxRam()))) {
+			serverCosts.push([(2 ** i), ns.getPurchasedServerCost(2 ** i) * ns.getPurchasedServerLimit()])
+		}
 	}
 	return serverCosts
 }
@@ -406,8 +417,8 @@ export async function primeServer(ns : NS, host : string) : Promise<void> {
 			const currServInfo = ns.getServer(server)
 			await updateRemoteScripts(ns, server)
 
-			const maxGrowThreads = Math.ceil(ns.growthAnalyze(host, target.moneyMax / target.moneyAvailable, currServInfo.cpuCores))
-			const maxWeakenThreads = Math.ceil((((maxGrowThreads * CONSTANTS.growSecInc) + (target.hackDifficulty - target.minDifficulty)) / CONSTANTS.weakenSecDec) * (1 - (0.0625 * (currServInfo.cpuCores - 1))))
+			const maxGrowThreads = Math.ceil(ns.growthAnalyze(host, (target.moneyAvailable > 0) ? target.moneyMax / target.moneyAvailable : target.moneyMax / (target.moneyAvailable+1), currServInfo.cpuCores))
+			const maxWeakenThreads = Math.min(Math.ceil((((maxGrowThreads * CONSTANTS.growSecInc) + (target.hackDifficulty - target.minDifficulty)) / CONSTANTS.weakenSecDec) * (1 - (0.0625 * (currServInfo.cpuCores - 1)))),2000)
 				
 			if (getTargetTotalThreads(ns, host).weaken < maxWeakenThreads) {
 				const threadCount = Math.min(threadCountFn(currServInfo,CONSTANTS.scripts.weaken),maxWeakenThreads)
@@ -435,7 +446,7 @@ export async function primeServer(ns : NS, host : string) : Promise<void> {
 export function uuidv4() : string {
 	// @ts-expect-error placeholderDescription
 	return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c => (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16))
-	// return randomUUID()
+	// return crypto.randomUUID()
 }
 
 /**
@@ -517,7 +528,7 @@ export function checkSetWarfare(ns : NS) : void {
 	if (gangGetTerritory(ns) < 1 && !gangInfo.territoryWarfareEngaged) {
 		const minWarfareChance = Object.keys(ns.gang.getOtherGangInformation()).filter((gangName) => (gangName != gangInfo.faction))
 			.reduce((prev, gangName) => Math.min(prev,ns.gang.getChanceToWinClash(gangName)),1)
-		if (minWarfareChance > 0.9) ns.gang.setTerritoryWarfare(true)
+		if (minWarfareChance > 0.8) ns.gang.setTerritoryWarfare(true)
 	} else {
 		ns.gang.setTerritoryWarfare(false)
 	}
@@ -541,23 +552,20 @@ export async function ascend(ns : NS) : Promise<void> {
  * @param memberInfo - Array of gang member info objects of which will be iterated over
  */
 export function setGangTasks2(ns : NS, memberInfo: GangMemberInfo[]) : void {
-	const memberArray = memberInfo.map(member => {
-		return Object.assign({},member,{
-			maxMult     : Math.max(member.str_asc_mult, member.def_asc_mult, member.dex_asc_mult, member.agi_asc_mult),
-			maxCombat   : Math.max(member.str, member.def, member.dex, member.agi),
-			totalCombat : member.str + member.def + member.dex + member.agi,
-			baseStr     : member.str / (member.str_asc_mult * member.str_mult),
-			baseDef     : member.def / (member.def_asc_mult * member.def_mult),
-			baseDex     : member.dex / (member.dex_asc_mult * member.dex_mult),
-			baseAgi     : member.agi / (member.agi_asc_mult * member.agi_mult),
-			baseCombat  : member.str / (member.str_asc_mult * member.str_mult) +
-						member.def / (member.def_asc_mult * member.def_mult) +
-						member.dex / (member.dex_asc_mult * member.dex_mult) +
-						member.agi / (member.agi_asc_mult * member.agi_mult)
-		}) as GangMemberInfoMulti
+	const memberArray = memberInfo.map(m => {
+		return Object.assign({},m,{
+			maxMult     : Math.max(m.str_asc_mult, m.def_asc_mult, m.dex_asc_mult, m.agi_asc_mult),
+			maxCombat   : Math.max(m.str, m.def, m.dex, m.agi),
+			totalCombat : m.str + m.def + m.dex + m.agi,
+			baseStr     : m.str / (m.str_asc_mult * m.str_mult),
+			baseDef     : m.def / (m.def_asc_mult * m.def_mult),
+			baseDex     : m.dex / (m.dex_asc_mult * m.dex_mult),
+			baseAgi     : m.agi / (m.agi_asc_mult * m.agi_mult),
+			get baseCombat() { return this.baseStr + this.baseDef + this.baseDex + this.baseAgi }
+		}) as GangMember
 	})
 
-	const memberArrayTraining  = memberArray.filter(member => member.baseCombat <= (150 * 4) || member.maxMult <= 6)
+	const memberArrayTraining  = memberArray.filter(member => member.baseCombat <= (150 * 4) || member.maxMult <= 10)
 	const memberArrayTaskReady = memberArray.filter(member => !memberArrayTraining.includes(member))
 
 	memberArrayTraining.forEach(member => ns.gang.setMemberTask(member.name, 'Train Combat'))
@@ -567,9 +575,9 @@ export function setGangTasks2(ns : NS, memberInfo: GangMemberInfo[]) : void {
 /**
  * Sets the gang members tasks according to a set distribution of money/respect/territory
  * @param ns 
- * @param memberInfo - Array of Gang member info multi objects to assign tasks to
+ * @param memberInfo - Array of GangMember objects to assign tasks to
  */
-export function contextualSetMemberTask(ns : NS, memberInfo : GangMemberInfoMulti[]) : void {
+export function contextualSetMemberTask(ns : NS, memberInfo : GangMember[]) : void {
 	memberInfo.sort(() => Math.random() - 0.5).forEach((member, index) => {
 		if ((index + 1) <= CONSTANTS.gang.percentMoney * memberInfo.length) {
 			ns.gang.setMemberTask(member.name,gangMoneyTask(member))
@@ -583,10 +591,10 @@ export function contextualSetMemberTask(ns : NS, memberInfo : GangMemberInfoMult
 
 /**
  * Gets the most optimal task to generate money for a gang member at any given time
- * @param memberInfo Individual Gang member info multi object
+ * @param memberInfo Individual GangMember object
  * @returns A string value for which task should be performed
  */
-export function gangMoneyTask(memberInfo : GangMemberInfoMulti) : string {
+export function gangMoneyTask(memberInfo : GangMember) : string {
 	if (Math.random() < 0.2) {
 		return 'Train Combat'
 	} else if (memberInfo.totalCombat > 750) {
@@ -600,10 +608,10 @@ export function gangMoneyTask(memberInfo : GangMemberInfoMulti) : string {
  * Gets the most optimal task to generate the most respect for a gang member at any given time.
  * Falls back to territory if insufficent stats or sufficient respect.
  * @param ns 
- * @param memberInfo Individual Gang member info multi object
+ * @param memberInfo Individual GangMember object
  * @returns A string value for which task should be performed
  */
-export function gangRespectTask(ns : NS, memberInfo : GangMemberInfoMulti) : string {
+export function gangRespectTask(ns : NS, memberInfo : GangMember) : string {
 	if ((ns.getFactionRep(ns.gang.getGangInformation().faction) > 2.5e6) || (memberInfo.totalCombat < 1000)) {
 		return gangTerritoryTask(ns, memberInfo)
 	} else {
@@ -615,10 +623,10 @@ export function gangRespectTask(ns : NS, memberInfo : GangMemberInfoMulti) : str
  * Gets the most optimal task to generate the most territory for a gang member at any given time.
  * Falls back to generating money if no territory needed.
  * @param ns 
- * @param memberInfo Individual Gang member info multi object
+ * @param memberInfo Individual GangMember object
  * @returns A string value for which task should be performed
  */
-export function gangTerritoryTask(ns : NS, memberInfo : GangMemberInfoMulti) : string {
+export function gangTerritoryTask(ns : NS, memberInfo : GangMember) : string {
 	const gangInfo      = ns.gang.getGangInformation()
 	if (gangGetTerritory(ns) < 1 && !gangInfo.territoryWarfareEngaged) {
 		return 'Territory Warfare'
@@ -628,14 +636,82 @@ export function gangTerritoryTask(ns : NS, memberInfo : GangMemberInfoMulti) : s
 }
 
 /**
- * Get the amount of territory that the players gang has. Required as other factions can all be at zero prior to your gang being at one.
+ * Get the amount of territory that the players gang has.
+ * Required as other factions can all be at zero prior to your gang being at one.
  * @param ns 
  * @returns Amount of territory the players gang has
  */
 export function gangGetTerritory(ns : NS) : number {
-	const gangInfo      = ns.gang.getGangInformation()
-	const otherGangs    = Object.keys(ns.gang.getOtherGangInformation()).filter(gang => gang != gangInfo.faction)
-	// @ts-expect-error curr is indexable string
-	const territory  = 1 - otherGangs.reduce((prev,curr) => ns.gang.getOtherGangInformation()[curr]['territory'] + prev, 0)
+	const gangInfo   = ns.gang.getGangInformation()
+	const otherGangs = Object.keys(ns.gang.getOtherGangInformation()).filter(gang => gang != gangInfo.faction)
+	const territory  = 1 - otherGangs.reduce((prev,curr) => ns.gang.getOtherGangInformation()[curr as keyof GangOtherInfo]['territory'] + prev, 0)
 	return territory
+}
+
+//TODO export function getHackingAugments(ns : NS, faction : string) : string[] {
+
+export function getContracts(ns : NS) : relativeFileList[] {
+	const serverFiles = getVisibleHosts(ns).map(host => { return {'host' : host, 'files' : ns.ls(host, 'cct')} })
+	const contracts = serverFiles.filter(relativeFiles => relativeFiles.files.length > 0)
+
+	return contracts.map(contract => { return contract.files.map(file => { return {'host' : contract.host, 'file' : file} }) }).flat()
+}
+
+export function solveContracts(ns : NS) : void {
+	const contracts = getContracts(ns)
+	contracts.forEach(contract => {
+		const contractType = ns.codingcontract.getContractType(contract.file, contract.host)
+		
+		switch (contractType) {
+			case ('Spiralize Matrix') : {
+				spiralizeMatrix(ns, ns.codingcontract.getData(contract.file, contract.host),contract)
+				break
+			}
+			case ('Total Ways to Sum') : {
+				console.log(ns.codingcontract.getContractType(contract.file, contract.host))
+				console.log(ns.codingcontract.getDescription(contract.file, contract.host))
+				console.log(ns.codingcontract.getData(contract.file, contract.host))
+				console.log('')
+				// totalWaysToSum(ns, ns.codingcontract.getData(contract.file, contract.host), contract)
+				break
+			}
+			default : {
+				// console.log(contract)
+				// console.log(ns.codingcontract.getContractType(contract.file, contract.host))
+				// console.log(ns.codingcontract.getDescription(contract.file, contract.host))
+				// console.log(ns.codingcontract.getData(contract.file, contract.host))
+				// console.log('')
+				break
+			}
+		}
+	})
+}
+
+export function spiralizeMatrix(ns : NS, input : number[][], contract : relativeFileList) : void {
+	/** Example input
+		[
+			[41,44, 5,44,50,13,37,23,26,36,23,46,30,39]
+			[44,25,22,23,48,46, 9, 3,20, 2, 8,21,22,29]
+			[38, 5,11,38,50, 2, 1,18,20,27,10, 9,37,16]
+			[18,33,23,27,10, 1, 5,23,37,14, 3,48, 7, 8]
+			[45, 1,45,31, 6,46,44,16,40,40,37,46,35,11]
+			[37,18,16,28, 3,39,30,35,23,48,30,13,41, 9]
+		]
+	*/
+	let inputArray = input
+	const result : number[][] = []
+
+	do {
+		result.push(inputArray.shift() as number[])
+		result.push(inputArray.map(arrayRow => arrayRow.pop() as number))
+		if (inputArray.every(array => array.length == 0)) break
+		inputArray.reverse()
+		inputArray = inputArray.map(arrayRow => arrayRow.reverse())
+	} while (inputArray.length > 0)
+
+	ns.print(`Completed contract: ${contract.file} on ${contract.host} for:\n${ns.codingcontract.attempt(result.flat().map(n => n.toString(10)), contract.file, contract.host, {returnReward : true})}`)
+}
+
+export function totalWaysToSum(ns : NS, input : unknown, contract : relativeFileList) : void {
+	// Do things
 }

@@ -11,7 +11,7 @@ export async function main(ns : NS) : Promise<void> {
 		let i = 0
 
 		const optimalServer = findOptimalHost(ns)
-		// const optimalServer = 'n00dles'
+		// const optimalServer = 'rho-construction'
 		const targetServerInfo = ns.getServer(optimalServer)
 
 		ns.print(`INFO\nTargeting ${optimalServer}\nMin sec: ${targetServerInfo.minDifficulty}\nMax money: ${ns.nFormat(targetServerInfo.moneyMax,'$ 0.00a')}`)

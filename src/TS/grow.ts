@@ -6,7 +6,8 @@ export async function main(ns : NS) : Promise<void> {
 	
 	ns.print(`Sleeping for ${ns.tFormat(sleepTime)}`)
 	await sleep(sleepTime)
-	await ns.grow(targetServer)
+	for (let i = 0; i <= ((ns.args[0] == 'joesguns') ? 9 : 0); ++i)
+		await ns.grow(targetServer)
 }
 
 function sleep(ms : number) : Promise<void> {

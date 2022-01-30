@@ -19,6 +19,6 @@ export async function main(ns : NS) : Promise<void> {
 			await updateRemoteScripts(ns, server)
 			if (threadCount > 0) ns.exec(CONSTANTS.scripts.maxGrow, server, threadCount, CONSTANTS.xpServer, performance.now())
 		}
-		await sleep(200)
+		await sleep(5e2)
 	}
 }
