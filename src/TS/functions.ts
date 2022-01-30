@@ -185,7 +185,7 @@ export function getThreadRatios(ns : NS, host : string, targetHost : string, hac
 	const coreBonus = 1 + (hostServer.cpuCores - 1) / 16
 
 	const h0 = Math.max(1,Math.floor(hackThreadsFromMax(ns, player, targetServer, hackPercent)))
-    const w0 = Math.min(Math.max(1,Math.ceil(((CONSTANTS.hackSecInc * h0) / CONSTANTS.weakenSecDec) / coreBonus), 2000))
+    const w0 = Math.min(Math.max(1,Math.ceil(((CONSTANTS.hackSecInc * h0) / CONSTANTS.weakenSecDec) / coreBonus)), 2000)
     const g0 = Math.ceil(ns.growthAnalyze(targetHost, (1 - hackPercent) ** - 1, hostServer.cpuCores))
 	// const g0 = Math.ceil(Math.log(1/(1-hackPercent)) / Math.log(ns.formulas.hacking.growPercent(targetServer,1,player,hostServer.cpuCores)))
     const w1 = Math.ceil(((CONSTANTS.growSecInc * g0) / CONSTANTS.weakenSecDec) / coreBonus)
@@ -712,6 +712,19 @@ export function spiralizeMatrix(ns : NS, input : number[][], contract : relative
 	ns.print(`Completed contract: ${contract.file} on ${contract.host} for:\n${ns.codingcontract.attempt(result.flat().map(n => n.toString(10)), contract.file, contract.host, {returnReward : true})}`)
 }
 
-export function totalWaysToSum(ns : NS, input : unknown, contract : relativeFileList) : void {
-	// Do things
+export function totalWaysToSum(ns : NS, input : number, contract : relativeFileList) : void {
+	let answer : number;
+	if (input < 2) answer = 0
+	for (let i = input - 1; i > 0; --i) {
+		answer = 1
+	}
+
+	function getAdditiveFactors(input : number, result = 0) : number {
+		if (input <= 1) {
+			return result
+		} else {
+			
+			return 0
+		}
+	}
 }
