@@ -1,4 +1,4 @@
-import { GangMemberAscension, GangMemberInfo, GangOtherInfo, GangOtherInfoObject, NS, Player, Server, SleeveSkills, SleeveTask } from '@ns'
+import { GangMemberAscension, GangMemberInfo, GangOtherInfo, NS, Player, Server, SleeveSkills, SleeveTask } from '@ns'
 import { threadRatios, hgwTimes, psInfo, threadCountTarget, GangMember } from '@types'
 
 export const CONSTANTS = {
@@ -178,8 +178,6 @@ export function hackThreadsFromMax(ns : NS, player : Player, server : Server, ha
 export function getThreadRatios(ns : NS, host : string, targetHost : string, hackPercent : number) : threadRatios {
 	const hostServer = ns.getServer(host)
 	const targetServer = ns.getServer(targetHost)
-	// const postAtkTgt = targetServer
-	// postAtkTgt.moneyAvailable = postAtkTgt.moneyMax * hackPercent
 	const player = ns.getPlayer()
 
 	const coreBonus = 1 + (hostServer.cpuCores - 1) / 16
@@ -187,7 +185,6 @@ export function getThreadRatios(ns : NS, host : string, targetHost : string, hac
 	const h0 = Math.max(1,Math.floor(hackThreadsFromMax(ns, player, targetServer, hackPercent)))
     const w0 = Math.min(Math.max(1,Math.ceil(((CONSTANTS.hackSecInc * h0) / CONSTANTS.weakenSecDec) / coreBonus)), 2000)
     const g0 = Math.ceil(ns.growthAnalyze(targetHost, (1 - hackPercent) ** - 1, hostServer.cpuCores))
-	// const g0 = Math.ceil(Math.log(1/(1-hackPercent)) / Math.log(ns.formulas.hacking.growPercent(targetServer,1,player,hostServer.cpuCores)))
     const w1 = Math.ceil(((CONSTANTS.growSecInc * g0) / CONSTANTS.weakenSecDec) / coreBonus)
 	return { 'hack0' : h0, 'weaken0': w0, 'grow0': g0, 'weaken1' : w1 }
 }
@@ -501,7 +498,6 @@ export function ascendAvailableGangMembers(ns : NS, membersInfo : GangMemberInfo
  * @returns 
  */
 export function getEquipmentAvailable(ns : NS, member : GangMemberInfo) : string[] {
-	// const equipment = ns.gang.getEquipmentNames().filter(equipment => ns.gang.getEquipmentType(equipment) != 'Rootkit')
 	const equipment = ns.gang.getEquipmentNames().filter(equipment => !(ns.gang.getEquipmentStats(equipment).hack))
 	return equipment.filter(item => !(member.upgrades.includes(item)))
 }
@@ -667,19 +663,6 @@ export function getContracts(ns : NS) : CodingContract[] {
 	return contracts.map(contract => contract.files.map(file => new CodingContract(ns, contract.host, file))).flat()
 }
 
-// export function getContracts(ns : NS) : CodingContractData[] {
-// 	const serverFiles = getVisibleHosts(ns).map(host => { return {'host' : host, 'files' : ns.ls(host, 'cct')} })
-// 	const contracts = serverFiles.filter(relativeFiles => relativeFiles.files.length > 0)
-
-// 	return contracts.map(contract => {return contract.files.map(file => {return {
-// 		'host' : contract.host,
-// 		'file' : file,
-// 		'type' : ns.codingcontract.getContractType(file,contract.host),
-// 		'data' : ns.codingcontract.getData(file,contract.host),
-// 		attempt: (answer : (number | string[])) => ns.codingcontract.attempt(answer, file, contract.host, {returnReward : true})
-// 	}})}).flat()
-// }
-
 export function solveContracts(ns : NS) : void {
 	const contracts = getContracts(ns)
 	contracts.forEach(contract => {
@@ -788,7 +771,6 @@ function spiralizeMatrix(ns : NS, contract : CodingContract) : void {
 		inputArray = inputArray.map(arrayRow => arrayRow.reverse())
 	} while (inputArray.length > 0)
 
-	// ns.print(`Completed contract: ${contract.file} on ${contract.host} for the reward:\n${ns.codingcontract.attempt(result.flat().map(n => n.toString(10)), contract.file, contract.host, {returnReward : true})}`)
 	ns.print(`Completed contract: ${contract.file} on ${contract.host} for the reward:\n${contract.attempt(result.flat().map(n => n.toString(10)))}`)
 }
 
@@ -801,7 +783,7 @@ function stolenTotalWaysToSum(ns : NS, contract : CodingContract) : void {
 			ways[j] += ways[j - i]
 		}
 	}
-	// ns.print(`Completed contract: ${contract.file} on ${contract.host} for the reward:\n${ns.codingcontract.attempt(integerPartition(input),contract.file,contract.host,{returnReward : true})}`)
+
 	ns.print(`Completed contract: ${contract.file} on ${contract.host} for the reward:\n${contract.attempt(ways[contract.data as number])}`)
 }
 
