@@ -1,5 +1,5 @@
-import { GangMemberAscension, GangMemberInfo, GangOtherInfo, NS, Player, Server } from '@ns'
-import { threadRatios, hgwTimes, psInfo, threadCountTarget, GangMember, relativeFileList } from '@types'
+import { GangMemberAscension, GangMemberInfo, GangOtherInfo, GangOtherInfoObject, NS, Player, Server, SleeveSkills, SleeveTask } from '@ns'
+import { threadRatios, hgwTimes, psInfo, threadCountTarget, GangMember } from '@types'
 
 export const CONSTANTS = {
 	hackSecInc : 0.002,
@@ -12,7 +12,7 @@ export const CONSTANTS = {
 		share     : '/TS/share.js',
 		maxGrow   : '/TS/maxGrow.js',
 	},
-	targetHackPercent : 0.0001,
+	targetHackPercent : 0.15,
 	xpServer : 'joesguns',
 	gang : {
 		maxAscRatio      : 1.60,
@@ -260,8 +260,8 @@ export async function runHWGWCycle(ns : NS, host : string, optimalServer : strin
 				// const availableThreads = Math.floor((hostServer.maxRam - hostServer.ramUsed) / ns.getScriptRam(CONSTANTS.scripts.share))
 				// if (availableThreads) ns.exec(CONSTANTS.scripts.share, host, availableThreads)
 			}
-		} catch (e) { /* DO NOTHING */ }
-		return true
+		
+		} finally { /* eslint-disable no-unsafe-finally */ return true }
 	} else {
 		return false
 	} 
@@ -501,8 +501,9 @@ export function ascendAvailableGangMembers(ns : NS, membersInfo : GangMemberInfo
  * @returns 
  */
 export function getEquipmentAvailable(ns : NS, member : GangMemberInfo) : string[] {
-	const equipment = ns.gang.getEquipmentNames().filter((equipment) => ns.gang.getEquipmentType(equipment) != 'Rootkit')
-	return equipment.filter((item) => !(member.upgrades.includes(item)))
+	// const equipment = ns.gang.getEquipmentNames().filter(equipment => ns.gang.getEquipmentType(equipment) != 'Rootkit')
+	const equipment = ns.gang.getEquipmentNames().filter(equipment => !(ns.gang.getEquipmentStats(equipment).hack))
+	return equipment.filter(item => !(member.upgrades.includes(item)))
 }
 
 /**
@@ -525,10 +526,10 @@ export function buyAvailableEquipment(ns : NS, membersInfo : GangMemberInfo[]) :
 export function checkSetWarfare(ns : NS) : void {
 	const gangInfo = ns.gang.getGangInformation()
 
-	if (gangGetTerritory(ns) < 1 && !gangInfo.territoryWarfareEngaged) {
+	if (gangGetTerritory(ns) < 1) {
 		const minWarfareChance = Object.keys(ns.gang.getOtherGangInformation()).filter((gangName) => (gangName != gangInfo.faction))
 			.reduce((prev, gangName) => Math.min(prev,ns.gang.getChanceToWinClash(gangName)),1)
-		if (minWarfareChance > 0.8) ns.gang.setTerritoryWarfare(true)
+		minWarfareChance > 0.8 ? ns.gang.setTerritoryWarfare(true) : ns.gang.setTerritoryWarfare(false)
 	} else {
 		ns.gang.setTerritoryWarfare(false)
 	}
@@ -565,7 +566,7 @@ export function setGangTasks2(ns : NS, memberInfo: GangMemberInfo[]) : void {
 		}) as GangMember
 	})
 
-	const memberArrayTraining  = memberArray.filter(member => member.baseCombat <= (150 * 4) || member.maxMult <= 10)
+	const memberArrayTraining  = memberArray.filter(member => member.baseCombat <= (150 * 4) || member.maxMult <= 5.5)
 	const memberArrayTaskReady = memberArray.filter(member => !memberArrayTraining.includes(member))
 
 	memberArrayTraining.forEach(member => ns.gang.setMemberTask(member.name, 'Train Combat'))
@@ -642,52 +643,130 @@ export function gangTerritoryTask(ns : NS, memberInfo : GangMember) : string {
  * @returns Amount of territory the players gang has
  */
 export function gangGetTerritory(ns : NS) : number {
-	const gangInfo   = ns.gang.getGangInformation()
-	const otherGangs = Object.keys(ns.gang.getOtherGangInformation()).filter(gang => gang != gangInfo.faction)
-	const territory  = 1 - otherGangs.reduce((prev,curr) => ns.gang.getOtherGangInformation()[curr as keyof GangOtherInfo]['territory'] + prev, 0)
-	return territory
+	const gangInfo       = ns.gang.getGangInformation()
+	const allGangs       = ns.gang.getOtherGangInformation()
+	const otherGangKeys  = Object.keys(allGangs).filter(gang => gang != gangInfo.faction)
+	return 1 - otherGangKeys.reduce((prev,curr) => allGangs[curr as keyof GangOtherInfo]['territory'] + prev, 0)
 }
 
 //TODO export function getHackingAugments(ns : NS, faction : string) : string[] {
 
-export function getContracts(ns : NS) : relativeFileList[] {
+export class CodingContract {
+	constructor(private ns : NS, public host : string, public file : string) { }
+
+	get type() : string  { return this.ns.codingcontract.getContractType(this.file, this.host) }
+	get data() : unknown { return this.ns.codingcontract.getData(this.file, this.host)         }
+	
+	attempt(answer : (number | string[] | string)) : string { return this.ns.codingcontract.attempt(answer as (number | string[]), this.file, this.host, {returnReward : true}) as string }
+}
+
+export function getContracts(ns : NS) : CodingContract[] {
 	const serverFiles = getVisibleHosts(ns).map(host => { return {'host' : host, 'files' : ns.ls(host, 'cct')} })
 	const contracts = serverFiles.filter(relativeFiles => relativeFiles.files.length > 0)
 
-	return contracts.map(contract => { return contract.files.map(file => { return {'host' : contract.host, 'file' : file} }) }).flat()
+	return contracts.map(contract => contract.files.map(file => new CodingContract(ns, contract.host, file))).flat()
 }
+
+// export function getContracts(ns : NS) : CodingContractData[] {
+// 	const serverFiles = getVisibleHosts(ns).map(host => { return {'host' : host, 'files' : ns.ls(host, 'cct')} })
+// 	const contracts = serverFiles.filter(relativeFiles => relativeFiles.files.length > 0)
+
+// 	return contracts.map(contract => {return contract.files.map(file => {return {
+// 		'host' : contract.host,
+// 		'file' : file,
+// 		'type' : ns.codingcontract.getContractType(file,contract.host),
+// 		'data' : ns.codingcontract.getData(file,contract.host),
+// 		attempt: (answer : (number | string[])) => ns.codingcontract.attempt(answer, file, contract.host, {returnReward : true})
+// 	}})}).flat()
+// }
 
 export function solveContracts(ns : NS) : void {
 	const contracts = getContracts(ns)
 	contracts.forEach(contract => {
-		const contractType = ns.codingcontract.getContractType(contract.file, contract.host)
-		
-		switch (contractType) {
+		switch (contract.type) {
 			case ('Spiralize Matrix') : {
-				spiralizeMatrix(ns, ns.codingcontract.getData(contract.file, contract.host),contract)
+				spiralizeMatrix(ns, contract)
 				break
 			}
 			case ('Total Ways to Sum') : {
-				console.log(ns.codingcontract.getContractType(contract.file, contract.host))
-				console.log(ns.codingcontract.getDescription(contract.file, contract.host))
-				console.log(ns.codingcontract.getData(contract.file, contract.host))
-				console.log('')
-				// totalWaysToSum(ns, ns.codingcontract.getData(contract.file, contract.host), contract)
+				stolenTotalWaysToSum(ns, contract)
+				break
+			}
+			case ('Find Largest Prime Factor') : {
+				stolenFindLargestPrimeFactor(ns, contract)
+				break
+			}
+			case ('Subarray with Maximum Sum') : {
+				stolenSubarrayMaxSum(ns, contract)
+				break
+			}
+			case ('Array Jumping Game') : {
+				stolenArrayJumping(ns, contract)
+				break
+			}
+			case ('Merge Overlapping Intervals') : {
+				stolenMergeOverlapping(ns, contract)
+				break
+			}
+			case ('Generate IP Addresses') : {
+				stolenGenerateIPAddresses(ns, contract)
+				break
+			}
+			case ('Algorithmic Stock Trader I') : {
+				stolenAlgorithmicStockTraderI(ns, contract)
+				break
+			}
+			case ('Algorithmic Stock Trader II') : {
+				stolenAlgorithmicStockTraderII(ns, contract)
+				break
+			}
+			case ('Algorithmic Stock Trader III') : {
+				stolenAlgorithmicStockTraderIII(ns, contract)
+				break
+			}
+			case ('Algorithmic Stock Trader IV') : {
+				stolenAlgorithmicStockTraderIV(ns, contract)
+				break
+			}
+			case ('Minimum Path Sum in a Triangle') : {
+				stolenMinPathSumTriangle(ns, contract)
+				break
+			}
+			case ('Unique Paths in a Grid I') : {
+				stolenUniquePathGridI(ns, contract)
+				break
+			}
+			case ('Unique Paths in a Grid II') : {
+				stolenUniquePathGridII(ns, contract)
+				break
+			}
+			case ('Sanitize Parentheses in Expression') : {
+				stolenParenthesesSanitization(ns, contract)
+				break
+			}
+			case ('Find All Valid Math Expressions') : {
+				stolenFindValidMaths(ns, contract)
 				break
 			}
 			default : {
-				// console.log(contract)
-				// console.log(ns.codingcontract.getContractType(contract.file, contract.host))
-				// console.log(ns.codingcontract.getDescription(contract.file, contract.host))
-				// console.log(ns.codingcontract.getData(contract.file, contract.host))
-				// console.log('')
+				console.log(contract)
 				break
 			}
 		}
 	})
 }
 
-export function spiralizeMatrix(ns : NS, input : number[][], contract : relativeFileList) : void {
+function convert2DArrayToString(arr: unknown[][]): string {
+	const components: string[] = [];
+	arr.forEach(e => {
+		let s = e.toString();
+		s = ["[", s, "]"].join("");
+		components.push(s);
+	});
+	return components.join(",").replace(/\s/g, "");
+}
+
+function spiralizeMatrix(ns : NS, contract : CodingContract) : void {
 	/** Example input
 		[
 			[41,44, 5,44,50,13,37,23,26,36,23,46,30,39]
@@ -698,7 +777,7 @@ export function spiralizeMatrix(ns : NS, input : number[][], contract : relative
 			[37,18,16,28, 3,39,30,35,23,48,30,13,41, 9]
 		]
 	*/
-	let inputArray = input
+	let inputArray = contract.data as unknown[][]
 	const result : number[][] = []
 
 	do {
@@ -709,22 +788,335 @@ export function spiralizeMatrix(ns : NS, input : number[][], contract : relative
 		inputArray = inputArray.map(arrayRow => arrayRow.reverse())
 	} while (inputArray.length > 0)
 
-	ns.print(`Completed contract: ${contract.file} on ${contract.host} for:\n${ns.codingcontract.attempt(result.flat().map(n => n.toString(10)), contract.file, contract.host, {returnReward : true})}`)
+	// ns.print(`Completed contract: ${contract.file} on ${contract.host} for the reward:\n${ns.codingcontract.attempt(result.flat().map(n => n.toString(10)), contract.file, contract.host, {returnReward : true})}`)
+	ns.print(`Completed contract: ${contract.file} on ${contract.host} for the reward:\n${contract.attempt(result.flat().map(n => n.toString(10)))}`)
 }
 
-export function totalWaysToSum(ns : NS, input : number, contract : relativeFileList) : void {
-	let answer : number;
-	if (input < 2) answer = 0
-	for (let i = input - 1; i > 0; --i) {
-		answer = 1
-	}
-
-	function getAdditiveFactors(input : number, result = 0) : number {
-		if (input <= 1) {
-			return result
-		} else {
-			
-			return 0
+function stolenTotalWaysToSum(ns : NS, contract : CodingContract) : void {
+	const ways : number[] = [1]
+	ways.length = (contract.data as number) + 1
+	ways.fill(0,1)
+	for (let i = 1; i < (contract.data as number); ++i) {
+		for (let j = i; j <= (contract.data as number); ++j) {
+			ways[j] += ways[j - i]
 		}
 	}
+	// ns.print(`Completed contract: ${contract.file} on ${contract.host} for the reward:\n${ns.codingcontract.attempt(integerPartition(input),contract.file,contract.host,{returnReward : true})}`)
+	ns.print(`Completed contract: ${contract.file} on ${contract.host} for the reward:\n${contract.attempt(ways[contract.data as number])}`)
+}
+
+function stolenFindLargestPrimeFactor(ns : NS, contract : CodingContract) : void {
+	let factor = 2
+	let n = contract.data as number
+	while (n > (factor - 1) * (factor - 1)) {
+		while (n % factor === 0) {
+			n = Math.round(n / factor)
+		}
+		++factor
+	}
+	ns.print(`Completed contract: ${contract.file} on ${contract.host} for the reward:\n${contract.attempt((n === 1 ? factor - 1 : n))}`)
+}
+
+function stolenSubarrayMaxSum(ns : NS, contract : CodingContract) : void {
+	const nums = (contract.data as number[]).slice()
+	for (let i = 1; i < nums.length; ++i) {
+		nums[i] = Math.max(nums[i], nums[i] + nums[i - 1])
+	}
+	ns.print(`Completed contract: ${contract.file} on ${contract.host} for the reward:\n${contract.attempt(Math.max(...nums))}`)
+}
+
+function stolenArrayJumping(ns : NS, contract : CodingContract) : void {
+	const n = (contract.data as number[]).length
+	let i = 0
+	for (let reach = 0; i < n && i <= reach; ++i) {
+		reach = Math.max(i + (contract.data as number[])[i], reach)
+	}
+	const solution = (i === n) ? 1 : 0
+	ns.print(`Completed contract: ${contract.file} on ${contract.host} for the reward:\n${contract.attempt(solution)}`)
+}
+
+function stolenMergeOverlapping(ns : NS, contract : CodingContract) : void {
+	const intervals = (contract.data as number[][]).slice()
+	intervals.sort((a : number[], b : number[]) => a[0] - b[0])
+
+	const result : number[][] = []
+	let start = intervals[0][0]
+	let end = intervals[0][1]
+	for (const i of intervals) {
+		if (i[0] <= end) {
+			end = Math.max(end, i[1])
+		} else {
+			result.push([start, end])
+			start = i[0]
+			end = i[1]
+		}
+	}
+	result.push([start, end])
+
+	ns.print(`Completed contract: ${contract.file} on ${contract.host} for the reward:\n${contract.attempt(convert2DArrayToString(result))}`)
+}
+
+function stolenGenerateIPAddresses(ns : NS, contract : CodingContract) : void {
+	const ret : string[] = []
+	const data = contract.data as string
+
+	for (let a = 1; a <= 3; ++a) {
+		for (let b = 1; b <= 3; ++b) {
+			for (let c = 1; c <= 3; ++c) {
+				for (let d = 1; d <= 3; ++d) {
+					if (a + b + c + d === data.length) {
+						const A : number = parseInt(data.substring(0, a), 10);
+						const B : number = parseInt(data.substring(a, a + b), 10);
+						const C : number = parseInt(data.substring(a + b, a + b + c), 10);
+						const D : number = parseInt(data.substring(a + b + c, a + b + c + d), 10);
+						if (A <= 255 && B <= 255 && C <= 255 && D <= 255) {
+							const ip : string = [A.toString(), ".", B.toString(), ".", C.toString(), ".", D.toString()].join("");
+							if (ip.length === data.length + 3) {
+								ret.push(ip);
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	ns.print(`Completed contract: ${contract.file} on ${contract.host} for the reward:\n${contract.attempt(ret)}`)
+}
+
+function stolenAlgorithmicStockTraderI(ns : NS, contract : CodingContract) : void {
+	const data = contract.data as number[]
+	let maxCur = 0
+	let maxSoFar = 0
+	for (let i = 1; i < data.length; ++i) {
+		maxCur = Math.max(0, (maxCur += data[i] - data[i-1]))
+		maxSoFar = Math.max(maxCur, maxSoFar)
+	}
+	ns.print(`Completed contract: ${contract.file} on ${contract.host} for the reward:\n${contract.attempt(maxSoFar)}`)
+}
+
+function stolenAlgorithmicStockTraderII(ns : NS, contract : CodingContract) : void {
+	let profit = 0
+	for (let i = 1; i < (contract.data as number[]).length; ++i) {
+		profit += Math.max((contract.data as number[])[i] - (contract.data as number[])[i - 1],0)
+	}
+	ns.print(`Completed contract: ${contract.file} on ${contract.host} for the reward:\n${contract.attempt(profit)}`)
+}
+
+function stolenAlgorithmicStockTraderIII(ns : NS, contract : CodingContract) : void {
+	let hold1 = Number.MIN_SAFE_INTEGER
+	let hold2 = Number.MIN_SAFE_INTEGER
+	let release1 = 0
+	let release2 = 0
+
+	for (const price of (contract.data as number[])) {
+		release2 = Math.max(release2, hold2 + price)
+		hold2    = Math.max(hold2, release1 - price)
+		release1 = Math.max(release1, hold1 + price)
+		hold1    = Math.max(hold1, price * -1)
+	}
+
+	ns.print(`Completed contract: ${contract.file} on ${contract.host} for the reward:\n${contract.attempt(release2)}`)
+}
+
+function stolenAlgorithmicStockTraderIV(ns : NS, contract : CodingContract) : void {
+	function solver() : number {
+		const data = contract.data as [number, number[]]
+		const k : number = data[0]
+		const prices : number[] = data[1]
+
+		const len = prices.length
+		if (len < 2) {
+			return 0
+		}
+
+		if (k > len / 2) {
+			let res = 0
+			for (let i = 1; i < len; ++i) {
+				res += Math.max(prices[i] - prices[i - 1],0)
+			}
+			return res
+		}
+
+		const hold : number[] = []
+		const rele : number[] = []
+		let cur : number
+		hold.length = k + 1
+		rele.length = k + 1
+		for (let i = 0; i <= k; ++i) {
+			hold[i] = Number.MIN_SAFE_INTEGER;
+			rele[i] = 0;
+		}
+
+		for (let i = 0; i < len; ++i) {
+			cur = prices[i]
+			for (let j = k; j > 0; --j) {
+				rele[j] = Math.max(rele[j], hold[j] + cur)
+				hold[j] = Math.max(hold[j], rele[j -1] - cur)
+			}
+		}
+
+		return rele[k]
+	}
+	ns.print(`Completed contract: ${contract.file} on ${contract.host} for the reward:\n${contract.attempt(solver())}`)
+}
+
+function stolenMinPathSumTriangle(ns : NS, contract : CodingContract) : void {
+	const data = contract.data as number[][]
+	const n = data.length
+	const dp = data[n - 1]
+	for (let i = n - 2; i > -1; --i) {
+		for (let j = 0; j < data[i].length; ++j) {
+			dp[j] = Math.min(dp[j], dp[j+1]) + data[i][j]
+		}
+	}
+	ns.print(`Completed contract: ${contract.file} on ${contract.host} for the reward:\n${contract.attempt(dp[0])}`)
+}
+
+function stolenUniquePathGridI(ns : NS, contract : CodingContract) : void {
+	const data = contract.data as number[]
+	const n = data[0]
+	const m = data[1]
+	const currRow : number[]= []
+	currRow.length = n
+	
+	for (let i = 0; i< n; i++) {
+		currRow[i] = 1
+	}
+	
+	for (let row = 1; row < m; ++row) {
+		for (let i = 1; i < n; ++i) {
+			currRow[i] += currRow[i - 1]
+		}
+	}
+
+	ns.print(`Completed contract: ${contract.file} on ${contract.host} for the reward:\n${contract.attempt(currRow[n - 1])}`)
+}
+
+function stolenUniquePathGridII(ns : NS, contract : CodingContract) : void {
+	const data = contract.data as number[][]
+	const obstacleGrid : number[][] = []
+	obstacleGrid.length = data.length
+
+	for (let i = 0; i < obstacleGrid.length; ++i) {
+		obstacleGrid[i] = data[i].slice()
+	}
+
+	for (let i = 0; i < obstacleGrid.length; ++i) {
+		for (let j = 0; j < obstacleGrid[0].length; ++j) {
+			if (obstacleGrid[i][j] == 1) {
+				obstacleGrid[i][j] = 0
+			} else if (i == 0 && j == 0) {
+				obstacleGrid[0][0] = 1
+			} else {
+				obstacleGrid[i][j] = (i > 0 ? obstacleGrid[i - 1][j] : 0) + (j > 0 ? obstacleGrid[i][j - 1] : 0)
+			}
+		}
+	}
+	const answer = obstacleGrid[obstacleGrid.length - 1][obstacleGrid[0].length - 1]
+
+	ns.print(`Completed contract: ${contract.file} on ${contract.host} for the reward:\n${contract.attempt(answer)}`)
+}
+
+function stolenParenthesesSanitization(ns : NS, contract : CodingContract) : void {
+	const data = contract.data as string
+	let left = 0
+	let right = 0
+	const res : string[] = []
+
+	for (let i = 0; i < data.length; ++i) {
+		if (data[i] === "(") {
+			++left
+		} else if (data[i] === ")") {
+			left > 0 ? --left : ++right
+		}
+	}
+
+	function dfs(pair : number, index : number, left : number, right : number, s : string, solution : string, res : string[]) : void {
+		if (s.length === index) {
+			if (left === 0 && right === 0 && pair === 0) {
+				for (let i = 0; i < res.length; ++i) {
+					if (res[i] === solution) {
+						return
+					}
+				}
+				res.push(solution)
+			}
+			return
+		}
+
+		if (s[index] === "(") {
+			if (left > 0) {
+				dfs(pair, index + 1, left - 1, right, s, solution, res)
+			}
+			dfs(pair + 1, index + 1, left, right, s, solution + s[index], res)
+		} else if (s[index] === ")") {
+			if (right > 0) {
+				dfs(pair, index + 1, left, right - 1, s, solution, res)
+			}
+			if (pair > 0) {
+				dfs(pair - 1, index + 1, left, right, s, solution + s[index], res)
+			}
+		} else {
+			dfs(pair, index + 1, left, right, s, solution + s[index], res)
+		}
+	}
+
+	dfs(0, 0, left, right, data, "", res)
+
+	ns.print(`Completed contract: ${contract.file} on ${contract.host} for the reward:\n${contract.attempt(res)}`)
+}
+
+function stolenFindValidMaths(ns : NS, contract : CodingContract) : void {
+	const data = contract.data as unknown[]
+	const num = data[0] as string
+	const target = data[1] as number
+
+	function helper(res : string[], path : string, num : string, target : number, pos : number, evaluated : number, multed : number) : void {
+		if (pos === num.length) {
+			if (target === evaluated) {
+				res.push(path);
+			}
+			return;
+		}
+  
+		for (let i = pos; i < num.length; ++i) {
+			if (i != pos && num[pos] == "0") {
+				break;
+			}
+			const cur = parseInt(num.substring(pos, i + 1));
+  
+			if (pos === 0) {
+				helper(res, path + cur, num, target, i + 1, cur, cur);
+			} else {
+				helper(res, path + "+" + cur, num, target, i + 1, evaluated + cur, cur);
+				helper(res, path + "-" + cur, num, target, i + 1, evaluated - cur, -cur);
+				helper(res, path + "*" + cur, num, target, i + 1, evaluated - multed + multed * cur, multed * cur);
+			}
+		}
+	}
+
+	const result: string[] = []
+    helper(result, "", num, target, 0, 0, 0)
+
+	ns.print(`Completed contract: ${contract.file} on ${contract.host} for the reward:\n${contract.attempt(result)}`)
+}
+
+export function sleeveThings(ns : NS) : void {
+	const sleeveInfo : [number, SleeveSkills, SleeveTask][] = [];
+	const qty = ns.sleeve.getNumSleeves()
+	for (let i = 0; i < qty; ++i) {
+		sleeveInfo.push([i, ns.sleeve.getSleeveStats(i), ns.sleeve.getTask(i)])
+	}
+	sleeveInfo.forEach(([num, skills, task]) => {
+		if (skills.sync < 100) {
+			if (task.task != 'Synchro') {
+				ns.sleeve.setToSynchronize(num)
+			}
+		} else {
+			if (task.task != "Commit Crime") {
+				ns.sleeve.setToCommitCrime(num,"Homicide")
+			}
+		}
+	})
 }

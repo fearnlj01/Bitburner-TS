@@ -48,10 +48,10 @@ export interface GangMember extends GangMemberInfo {
 
 export interface NS2 extends NS { heart: { break() : number} }
 
-export interface CodingContractData {
-	host: string;
-	file: string;
-	type: string;
-	data: unknown;
-	attempt(answer : (number | string | string[])): string | boolean
-}
+// export interface CodingContractData {
+// 	host: string;
+// 	file: string;
+// 	type: string;
+// 	data: unknown;
+// 	attempt(answer : (number | string | string[])): string | boolean
+// }
