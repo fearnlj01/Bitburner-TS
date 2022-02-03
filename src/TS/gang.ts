@@ -1,11 +1,14 @@
 import { NS } from '@ns'
-import { ascendAvailableGangMembers, buyAvailableEquipment, checkSetWarfare, sleep, uuidv4, setGangTasks2 } from '/TS/functions'
+import { uuidv4, sleep } from '/TS/functions'
+import { ascendAvailableGangMembers, buyAvailableEquipment, checkSetWarfare, setGangTasks2 } from '/TS/gangFunctions'
 
 export async function main(ns : NS) : Promise<void> {
 	// const noLogFuncs = ['gang.canRecruitMember','gang.getMemberNames','gang.purchaseEquipment']
 	// noLogFuncs.forEach((command) => ns.disableLog(command))
 	ns.disableLog('ALL')
 	ns.tail()
+	
+	if (!ns.gang.inGang()) ns.gang.createGang('Slum Snakes')
 	
 	while (true) {
 		checkSetWarfare(ns) //Sets warfare to enabled if likely to win
