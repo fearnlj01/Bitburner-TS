@@ -1,6 +1,15 @@
 import { NS, Division, EmployeeJobs } from '@ns'
 import { sleep } from '/TS/functions';
 
+export class CodingContract {
+	constructor(private ns : NS, public host : string, public file : string) { }
+
+	get type() : string  { return this.ns.codingcontract.getContractType(this.file, this.host) }
+	get data() : unknown { return this.ns.codingcontract.getData(this.file, this.host)         }
+	
+	attempt(answer : (number | string[])) : string { return this.ns.codingcontract.attempt(answer, this.file, this.host, {returnReward : true})}
+}
+
 export class CorporationInformation {
 
 	/** Corporation name */
@@ -31,7 +40,7 @@ export class CorporationInformation {
 	divisions: DivisionInfo[];
 
 	constructor(ns : NS) { 
-		const c = ns.corporation.getCorporation()
+		const c = ns['corporation'].getCorporation()
 
 		this.name = c.name
 		this.funds = c.funds
@@ -133,8 +142,8 @@ export class OfficeInfo {
 	setJobs : () => Promise<void>;
 
 	constructor(ns : NS, divisionName : string, city : string) {
-		const o = ns.corporation.getOffice(divisionName, city)
-		ns.corporation.setAutoJobAssignment
+		const o = ns['corporation'].getOffice(divisionName, city)
+		ns['corporation'].setAutoJobAssignment
 		this.size = o.size
 		this.minEne = o.minEne
 		this.maxEne = o.maxEne
@@ -153,7 +162,7 @@ export class OfficeInfo {
 				return false
 			} else {
 				while (o.employees.length < o.size) {
-					if (typeof ns.corporation.hireEmployee(divisionName, city) === 'undefined') break
+					if (typeof ns['corporation'].hireEmployee(divisionName, city) === 'undefined') break
 					await sleep(0)
 				} 
 				return true
@@ -161,7 +170,7 @@ export class OfficeInfo {
 		}
 		this.setJobs = async () => {
 			for (const job of ['Training','Operations','Engineer','Business','Management','Research & Development']) {
-				await ns.corporation.setAutoJobAssignment(divisionName,city,job,
+				await ns['corporation'].setAutoJobAssignment(divisionName,city,job,
 					(job === 'Training') ? o.size : Math.floor(o.size / 5)
 				)
 			}
@@ -189,7 +198,7 @@ export class EmployeeInfo {
 	job: string;
 
 	constructor(ns : NS, division : string, city : string, name : string) {
-		const e = ns.corporation.getEmployee(division, city, name)
+		const e = ns['corporation'].getEmployee(division, city, name)
 		this.name = e.name
 		this.mor = e.mor
 		this.hap = e.hap
@@ -202,13 +211,4 @@ export class EmployeeInfo {
 		this.sal = e.sal
 		this.job = e.pos
 	}
-}
-
-export class CodingContract {
-	constructor(private ns : NS, public host : string, public file : string) { }
-
-	get type() : string  { return this.ns.codingcontract.getContractType(this.file, this.host) }
-	get data() : unknown { return this.ns.codingcontract.getData(this.file, this.host)         }
-	
-	attempt(answer : (number | string[])) : string { return this.ns.codingcontract.attempt(answer, this.file, this.host, {returnReward : true})}
 }
